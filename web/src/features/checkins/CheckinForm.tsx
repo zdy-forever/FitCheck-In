@@ -125,13 +125,7 @@ function CheckinFormInner({ clientId, relationships, sessions, snapshot, onSubmi
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     const found = validateCheckin(v)
-    setErrors(found)
-    if (Object.keys(found).length > 0) {
-      toast.error(t('validation.fixErrors'))
-      const first = document.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]')
-      first?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      return
-    }
+    if (Object.keys(found).length > 0) return
     if (submittingRef.current) return
     submittingRef.current = true
     setSubmitting(true)
