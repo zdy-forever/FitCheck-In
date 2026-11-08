@@ -87,7 +87,10 @@ export const api = {
     return unwrap(await q)
   },
   async submitCheckin(input: Omit<Checkin, 'created_at' | 'updated_at' | 'reviewed_at'>) {
-    return unwrap(await supabase.from('pre_session_checkins').insert(input).select('*').single())
+    const row = unwrap(await supabase.from('pre_session_checkins').insert(input).select('*').single())
+    // Fold the subjective answers into today's readiness. Best effort: the check-in is already saved.
+    void supabase.functions.invoke('refresh-snapshot', { body: {} }).catch(() => undefined)
+    return row
   },
   async markReviewed(id: string) {
     return unwrap(await supabase.rpc('mark_checkin_reviewed', { p_checkin_id: id }))

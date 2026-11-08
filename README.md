@@ -28,7 +28,7 @@ on a real-time dashboard alongside session logs, notes and feedback.
 9. [Feature status](#9-feature-status)
 
 Further docs: [`docs/ALGORITHMS.md`](docs/ALGORITHMS.md) (what was ported from health+, how
-it was verified, limitations) · [`docs/TESTING.md`](docs/TESTING.md) (manual test script
+it was verified, what v2 changed and why, limitations) · [`docs/TESTING.md`](docs/TESTING.md) (manual test script
 for the core flow).
 
 ---
@@ -52,6 +52,7 @@ FitCheck-In/
 │  └─ functions/
 │     ├─ health-ingest/         authenticated Apple Health upload endpoint
 │     ├─ demo-session/          creates an isolated demo workspace (simulated data)
+│     ├─ refresh-snapshot/      recomputes the caller's snapshot (e.g. after a check-in)
 │     └─ _shared/metrics/       TS port of DerivedMetricsEngine + sufficiency layer (shared with web)
 ├─ ios/                         copy of the iOS FitCheckInSync module + git patch for health_monitor_ios
 ├─ tools/swift-golden/          compiles the ORIGINAL Swift engine to produce golden test vectors
@@ -88,9 +89,9 @@ reach the API.
 | Command | What it runs | Needs |
 |---|---|---|
 | `npm --prefix web run typecheck` | `tsc -b` strict, app + tests + shared engine | — |
-| `npm --prefix web test` | 157 unit tests: **128 Swift golden-vector equivalence tests**, sufficiency rules, DST calendar, HealthKit aggregation semantics, ingest validation, Swift↔server wire contract, demo data | — |
+| `npm --prefix web test` | 175 unit tests: **128 Swift golden-vector equivalence tests**, sufficiency rules, DST calendar, HealthKit aggregation semantics, ingest validation, Swift↔server wire contract, demo data | — |
 | `npx supabase test db` | 73 pgTAP assertions: RLS isolation, role immutability, cross-trainer privacy, per-category sharing, revocation, anti-spoofing, anon lockout | local stack |
-| `npm --prefix web run test:integration` | 15 tests against the live Edge Function + Auth: JWT rejection, roles, idempotent dedupe, per-sample rejection, insufficient-data withholding, sharing & revocation, deletion, demo isolation, **exact Swift-encoded payload** | local stack + functions serve, `SUPABASE_ANON_KEY` env |
+| `npm --prefix web run test:integration` | 17 tests against the live Edge Function + Auth: JWT rejection, roles, idempotent dedupe, per-sample rejection, insufficient-data withholding, sharing & revocation, deletion, demo isolation, **exact Swift-encoded payload** | local stack + functions serve, `SUPABASE_ANON_KEY` env |
 | `npm --prefix web run test:e2e` | 13 Playwright tests: full trainer↔client flow on **two browser contexts** (laptop + phone viewport), live realtime update, validation errors, reload persistence, sharing revocation, language & theme switching, sign-out, demo mode on desktop + mobile | local stack + functions serve, `web/.env.local` |
 | `tools/swift-golden/generate.sh` | Recompiles the original Swift engine and regenerates fixtures | Swift toolchain |
 
@@ -109,6 +110,7 @@ All of the above were run and passed during development; see the final report fo
    ```bash
    npx supabase functions deploy health-ingest
    npx supabase functions deploy demo-session
+   npx supabase functions deploy refresh-snapshot
    npx supabase secrets set DEMO_MODE_ENABLED=true     # false to disable the public demo
    ```
    `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected by Supabase — never put
@@ -208,7 +210,7 @@ switch language and theme. Full script: [`docs/TESTING.md`](docs/TESTING.md).
 - [x] Client history timeline; health trend charts with baseline + table view
 - [x] Sharing revocation, device unlink, delete-all-health-data, delete account
 - [x] Apple Health ingest API (auth, validation, dedupe, snapshot scoring)
-- [x] Ported health+ engine (golden-verified) + data-sufficiency rules
+- [x] Ported health+ engine (golden-verified) + readiness v2 (personal-baseline model, fixes stress bias, check-in aware)
 - [x] Demo mode with simulated, labelled, isolated data
 - [x] EN / 简体中文 everywhere, browser default, instant switch, persisted
 - [x] Light / dark / system theme; reduced motion & reduced transparency fallbacks

@@ -429,3 +429,6 @@ verify_jwt = false
 
 [functions.demo-session]
 verify_jwt = false
+
+[functions.refresh-snapshot]
+verify_jwt = false

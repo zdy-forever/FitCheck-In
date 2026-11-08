@@ -32,8 +32,22 @@ export async function recomputeSnapshot(
   }))
 
   const agg = aggregateForEngine(samples, { nowMs, timeZone })
-  const assessment = assessReadiness(agg.input, { nowMs, timeZone }, agg.sampleTimes)
   const date = localDateKey(nowMs, timeZone)
+
+  // Today's most recent pre-session check-in (any trainer) — the client's own report is a readiness signal.
+  const { data: checkins } = await admin
+    .from('pre_session_checkins')
+    .select('energy_level, sleep_quality, muscle_soreness, pain_level, created_at')
+    .eq('client_id', userId)
+    .gte('created_at', new Date(nowMs - 36 * 3_600_000).toISOString())
+    .order('created_at', { ascending: false })
+    .limit(5)
+  const todays = (checkins ?? []).find((c) => localDateKey(Date.parse(c.created_at), timeZone) === date)
+  const checkin = todays
+    ? { energy: todays.energy_level, sleepQuality: todays.sleep_quality, soreness: todays.muscle_soreness, pain: todays.pain_level }
+    : null
+
+  const assessment = assessReadiness(agg.input, { nowMs, timeZone }, agg.sampleTimes, undefined, { history: agg.history, load: agg.load, checkin })
 
   const { error: upErr } = await admin.from('health_snapshots').upsert(
     {

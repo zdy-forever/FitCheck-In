@@ -92,7 +92,8 @@ describe.skipIf(!ANON)('health-ingest Edge Function (live local stack)', () => {
       client.client.from('health_snapshots').select('assessment').single(),
     )
     const a = (data as { assessment: { scores: { readiness: { value: number | null; status: string } } } }).assessment
-    expect(a.scores.readiness.status).toBe('ok')
+    // 7 days of HRV/RHR history but only one night of sleep → v2 has 2 of 3 signals with enough history.
+    expect(a.scores.readiness.status).toBe('limited')
     expect(typeof a.scores.readiness.value).toBe('number')
   })
 
@@ -242,5 +243,47 @@ describe.skipIf(!ANON)('Swift-encoded upload (bytes produced by the iOS models)'
     expect(r.status).toBe(200)
     expect(r.body.accepted).toBe(3)
     expect(r.body.rejected).toEqual([])
+  })
+})
+
+describe.skipIf(!ANON)('readiness v2 end-to-end', () => {
+  it('uses personal history, and a same-day check-in lowers readiness via refresh-snapshot', async () => {
+    const c = await signUp('client')
+    const t = await signUp('trainer')
+    const tc = createClient(URL, ANON, { global: { headers: { Authorization: `Bearer ${t.token}` } }, auth: { persistSession: false } })
+    const cc = createClient(URL, ANON, { global: { headers: { Authorization: `Bearer ${c.token}` } }, auth: { persistSession: false } })
+    const { data: inv } = await tc.from('trainer_invitations').insert({ trainer_id: t.userId }).select('code').single()
+    await cc.rpc('accept_invitation', { p_code: inv!.code })
+
+    // 10 days of history + today, all near the person's normal.
+    const samples: Record<string, unknown>[] = []
+    for (let d = 0; d <= 10; d++) {
+      const at = iso(d * 24 * H + 3 * H)
+      samples.push({ sampleId: `h${d}`, metricType: 'hrv_sdnn', value: 48 + (d % 3) * 2, unit: 'ms', startAt: at, measuredAt: at })
+      samples.push({ sampleId: `r${d}`, metricType: 'resting_heart_rate', value: 55 + (d % 2), unit: 'bpm', startAt: at, measuredAt: at })
+      samples.push({ sampleId: `s${d}`, metricType: 'sleep_analysis', value: 7.3, unit: 'h', startAt: iso(d * 24 * H + 11 * H), measuredAt: iso(d * 24 * H + 3.7 * H), category: 'asleepCore' })
+    }
+    const up = await ingest(c.token, { schemaVersion: 1, device: { ...device, installationId: '6f1c1d8e-2b1e-4d0e-9a5a-0c0a5c1e9b09' }, timeZone: 'Australia/Sydney', enabledCategories: ['hrv', 'resting_heart_rate', 'sleep', 'scores'], samples })
+    expect(up.status).toBe(200)
+
+    type A = { algorithmVersion: string; scores: { readiness: { value: number | null; status: string }; stress: { value: number | null } }; drivers: { key: string }[] }
+    const read = async () => ((await cc.from('health_snapshots').select('assessment').single()).data as { assessment: A }).assessment
+    const before = await read()
+    expect(before.algorithmVersion).toMatch(/^fitcheck-readiness@2\./)
+    expect(before.scores.readiness.status).toBe('ok')
+    expect(before.scores.readiness.value!).toBeGreaterThan(50)
+    expect(before.scores.stress.value!).toBeLessThan(50) // normal day is NOT "elevated stress"
+
+    await cc.from('pre_session_checkins').insert({ client_id: c.userId, trainer_id: t.userId, sleep_quality: 2, energy_level: 1, muscle_soreness: 8, pain_level: 6, mental_state: 3, training_goal: 'test' })
+    const res = await fetch(`${URL}/functions/v1/refresh-snapshot`, { method: 'POST', headers: { apikey: ANON, Authorization: `Bearer ${c.token}`, 'Content-Type': 'application/json' }, body: '{}' })
+    expect(res.status).toBe(200)
+    const after = await read()
+    expect(after.scores.readiness.value!).toBeLessThan(before.scores.readiness.value! - 10)
+    expect(after.drivers.map((d) => d.key)).toEqual(expect.arrayContaining(['checkinPain', 'checkinEnergy']))
+  })
+
+  it('refresh-snapshot requires a token and only refreshes the caller', async () => {
+    const r = await fetch(`${URL}/functions/v1/refresh-snapshot`, { method: 'POST', headers: { apikey: ANON } })
+    expect(r.status).toBe(401)
   })
 })

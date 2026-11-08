@@ -32,7 +32,11 @@
 import { ENGINE_SOURCE, buildDerivedMetrics, type EngineContext } from './engine.ts'
 import type { EngineInput, EngineOutput } from './types.ts'
 
-export const ALGORITHM_VERSION = 'fitcheck-readiness@1.0.0+healthplus.668b85d'
+import { computeReadinessV2, READINESS_V2_VERSION, type Driver, type SignalDetail, type V2Input } from './readiness-v2.ts'
+
+/** Primary scores: FitCheck-In v2 (personal-baseline model). health+ port kept under `legacy`. */
+export const ALGORITHM_VERSION = READINESS_V2_VERSION
+export const LEGACY_ALGORITHM_VERSION = 'fitcheck-readiness@1.0.0+healthplus.668b85d'
 export const DEFAULT_MAX_SAMPLE_AGE_HOURS = 36
 
 export type ScoreStatus = 'ok' | 'limited' | 'insufficient'
@@ -97,6 +101,33 @@ export interface ReadinessAssessment {
     confidence: number
     personalized: boolean
   }
+  /** What moved readiness, largest first (points). */
+  drivers: Driver[]
+  /** Per-signal comparison with the person's own history. */
+  signals: SignalDetail[]
+  usedCheckin: boolean
+  /** Original health+ composite (for comparison only; not displayed as primary). */
+  legacy: {
+    algorithmVersion: string
+    readiness: number | null
+    recovery: number | null
+    stress: number | null
+    bodyBattery: number | null
+  }
+}
+
+/** v2 load bands (acute 7-day vs prior-21-day weekly average). Penalty starts above 1.3. */
+export function v2LoadStatus(acr: number): EngineOutput['loadStatus'] {
+  if (acr < 0.8) return 'underloaded'
+  if (acr <= 1.3) return 'balanced'
+  if (acr <= 1.5) return 'controlledRamp'
+  return 'overreaching'
+}
+
+export interface V2Extras {
+  history: V2Input['history']
+  load: V2Input['load']
+  checkin?: V2Input['checkin']
 }
 
 export interface SampleTimes {
@@ -118,6 +149,7 @@ export function assessReadiness(
   ctx: EngineContext,
   sampleTimes: SampleTimes = {},
   maxSampleAgeHours = DEFAULT_MAX_SAMPLE_AGE_HOURS,
+  v2Extras: V2Extras = { history: { hrv: [], rhr: [], sleepHours: [] }, load: null },
 ): ReadinessAssessment {
   const maxAgeMs = maxSampleAgeHours * 3_600_000
   const isFresh = (t: number | undefined) => t === undefined || ctx.nowMs - t <= maxAgeMs
@@ -178,6 +210,14 @@ export function assessReadiness(
   const s = out.intermediates
   const d = out.derived
 
+  const v2 = computeReadinessV2({
+    today: { hrv: raw.heartRateVariabilitySDNN, rhr: raw.restingHeartRate, sleepHours: raw.sleep.totalHours },
+    history: v2Extras.history,
+    load: v2Extras.load,
+    checkin: v2Extras.checkin ?? null,
+  })
+  const legacyVal = (x: number) => (compositeStatus === 'insufficient' ? null : round(x))
+
   return {
     algorithmVersion: ALGORITHM_VERSION,
     engineSource: ENGINE_SOURCE,
@@ -187,9 +227,9 @@ export function assessReadiness(
     defaultedInputs,
     staleInputs: stale,
     scores: {
-      readiness: score(d.readinessScore, compositeStatus),
-      recovery: score(d.recoveryScore, compositeStatus),
-      stress: score(d.stressScore, compositeStatus),
+      readiness: v2.readiness,
+      recovery: v2.recovery,
+      stress: v2.stress,
       bodyBattery: score(d.bodyBattery, compositeStatus),
       sleep: score(d.sleepScore, single(has.sleep, has.sleepBaseline && has.sleepStages)),
       hrvVsBaseline: score(s.hrvScore, single(has.hrv, has.hrvBaseline)),
@@ -211,14 +251,25 @@ export function assessReadiness(
     training: {
       load7Day: roundTo(out.totalLoad7Day, 1),
       load28Day: roundTo(out.totalLoad28Day, 1),
-      acuteChronicRatio: has.workouts ? roundTo(out.acuteChronicRatio, 2) : null,
-      loadStatus: has.workouts ? out.loadStatus : null,
+      // Same ratio and thresholds that drive the v2 readiness load adjustment.
+      acuteChronicRatio: v2.acuteChronicRatio !== null ? roundTo(v2.acuteChronicRatio, 2) : null,
+      loadStatus: v2.acuteChronicRatio === null ? null : v2LoadStatus(v2.acuteChronicRatio),
       loadFocus: has.workouts ? out.loadFocus : null,
     },
     calibration: {
       observedDays: out.calibration.observedDays,
       confidence: roundTo(out.calibration.confidence, 2),
       personalized: out.calibration.observedDays >= 14 && out.calibration.confidence >= 0.55,
+    },
+    drivers: v2.drivers,
+    signals: v2.signals,
+    usedCheckin: v2.usedCheckin,
+    legacy: {
+      algorithmVersion: LEGACY_ALGORITHM_VERSION,
+      readiness: legacyVal(d.readinessScore),
+      recovery: legacyVal(d.recoveryScore),
+      stress: legacyVal(d.stressScore),
+      bodyBattery: legacyVal(d.bodyBattery),
     },
   }
 }

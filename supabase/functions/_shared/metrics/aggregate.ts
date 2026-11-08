@@ -34,6 +34,10 @@ export interface StoredSample {
 export interface AggregateResult {
   input: EngineInput
   sampleTimes: SampleTimes
+  /** Per-day personal history for v2 (previous days only — today excluded). */
+  history: { hrv: { day: string; value: number }[]; rhr: { day: string; value: number }[]; sleepHours: { day: string; value: number }[] }
+  /** Acute (7-day) and chronic (prior 21 days, weekly-equivalent) training load; null without workouts. */
+  load: { acute7: number; chronicWeekly: number } | null
   /** Latest values for display with their timestamps. */
   latest: Partial<Record<'hrv' | 'restingHeartRate' | 'vo2Max', { value: number; measuredAt: number }>>
 }
@@ -229,8 +233,31 @@ export function aggregateForEngine(
     longTermTrends,
   }
 
+  // ── v2 personal history: one value per previous local day (today excluded) ──
+  const history: AggregateResult['history'] = { hrv: [], rhr: [], sleepHours: [] }
+  for (let i = 28; i >= 1; i--) {
+    const day = addDays(todayStart, -i, timeZone)
+    const next = addDays(day, 1, timeZone)
+    const key = localDateKey(day, timeZone)
+    const dayMean = (metric: MetricType) => {
+      const v = samples.filter((x) => x.metricType === metric && x.measuredAt >= day && x.measuredAt < next).map((x) => x.value)
+      return v.length ? v.reduce((a, b) => a + b, 0) / v.length : undefined
+    }
+    const h = dayMean('hrv_sdnn')
+    const r = dayMean('resting_heart_rate')
+    const sl = summarizeSleep(samples, sleepWindow(day, timeZone)).summary.totalHours
+    if (h !== undefined) history.hrv.push({ day: key, value: h })
+    if (r !== undefined) history.rhr.push({ day: key, value: r })
+    if (sl !== undefined) history.sleepHours.push({ day: key, value: sl })
+  }
+  const acute7 = workouts.filter((w) => w.date > addDays(nowMs, -7, timeZone)).reduce((a, w) => a + w.estimatedLoad, 0)
+  const prior21 = workouts.filter((w) => w.date <= addDays(nowMs, -7, timeZone)).reduce((a, w) => a + w.estimatedLoad, 0)
+  const load = workouts.length > 0 && prior21 > 0 ? { acute7, chronicWeekly: prior21 / 3 } : null
+
   return {
     input,
+    history,
+    load,
     sampleTimes: { sleepEndMs: lastNight.lastEnd, hrvMs: hrv?.measuredAt, restingHeartRateMs: rhr?.measuredAt },
     latest: {
       ...(hrv ? { hrv: { value: hrv.value, measuredAt: hrv.measuredAt } } : {}),

@@ -54,7 +54,66 @@ sub-score to match within 1e-6.
 
 Regenerate after changing the Swift engine: `tools/swift-golden/generate.sh`.
 
-## 4. The FitCheck-In sufficiency layer (`fitcheck-readiness@1.0.0`)
+## 4. FitCheck-In readiness v2 (primary since `fitcheck-readiness@2.0.0`)
+
+The faithful port above is kept (and still golden-tested) for reference, and its numbers
+are shown in the UI as a small "original health+ composite" line. The **displayed**
+Readiness / Recovery / Stress come from `supabase/functions/_shared/metrics/readiness-v2.ts`,
+which fixes problems found in the original composite:
+
+| # | Problem in health+ composite | Measured effect | v2 fix |
+|---|---|---|---|
+| 1 | Stress has a `+34` constant | A normal day scores stress **56** ("elevated") | Stress is centred on the person's own normal: normal day ≈ **35**, floor 10 |
+| 2 | Absolute HRV/RHR thresholds compare people with each other | Two people exactly at their own normal: readiness **65** (HRV 25 ms) vs **72** (HRV 85 ms) — penalises age/genetics | Only within-person z-scores → both **65** |
+| 3 | 7-day baseline includes today | Every deviation is shrunk | Baseline = previous days only (up to 28), ≥ 4 days required |
+| 4 | Missing inputs replaced by constants; missing food intake assumed = 82 % of expenditure | Scores move with data that was never measured | Only measured signals; weights re-normalised over what exists |
+| 5 | VO₂ "cardio score" can reach 125 | One long-term marker dominates a daily score | VO₂ max not used for daily readiness |
+| 6 | Sleep debt vs fixed 8 h for everyone | A 7 h sleeper is always "in debt" | Compared with own typical sleep (bounded 7–9 h); extra sleep helps a little, short sleep hurts more |
+| 7 | Readiness ⊃ Body Battery ⊃ Recovery ⊃ sleep/HRV | Same signals counted 3–4 times | Readiness = Recovery (each signal once) − load penalty + check-in adjustment |
+| 8 | The client's own check-in was not used | Subjective state ignored | Energy, sleep quality, soreness and pain adjust readiness and appear as drivers |
+
+### Formulas
+
+For each signal (HRV, resting HR, sleep): `z = (today − personal mean) / max(personal SD, floor)`
+over the previous ≤ 28 days (robust: one extreme value trimmed each side when ≥ 7 days).
+Floors: HRV 7 % of mean, RHR 2 bpm, sleep 0.5 h. Signed so positive = better; clamped ±3.
+
+* **Recovery** = `65 + 12 × Σ wᵢzᵢ / Σ wᵢ` (weights HRV 0.45, RHR 0.30, sleep 0.25, over
+  available signals). 65 = "your normal day".
+* **Stress** (physiological strain) = `35 − 15 × z_autonomic`, HRV and RHR only, floor 10.
+* **Training load**: acute = last 7 days of workout load, chronic = previous 21 days ÷ 3.
+  No penalty up to a ratio of 1.3; then 25 points per +1.0, capped at 15.
+* **Check-in** (same local day): energy `(e−3)×3`, sleep quality `(q−3)×2`,
+  soreness `−max(0,s−3)×1.2`, pain `−max(0,p−1)×1.5`.
+* **Readiness** = Recovery − load penalty + check-in adjustment, clamped 0–100. With no
+  wearable data but a check-in, a `limited` readiness is computed from the check-in alone.
+* Status: `ok` with all 3 signals, `limited` with 2 (or check-in only), `insufficient`
+  otherwise (value `null`). Every result lists its **drivers** in points.
+
+### Same scenarios, before and after
+
+| Scenario | health+ readiness / stress | v2 readiness / stress |
+|---|---|---|
+| Normal day (person with HRV ≈ 50) | 68 / **56** | 65 / **35** |
+| Normal day, low-HRV person (25 ms) | **65** / 60 | **65** / 35 |
+| Normal day, high-HRV person (85 ms) | **72** / 50 | **65** / 35 |
+| Bad day: HRV −30 %, RHR +6, sleep 5.5 h | 45 / 83 | 29 / 80 |
+| Great day: HRV +20 %, RHR −3, sleep 8.2 h | 77 / 44 | 88 / 10 |
+| Normal day + check-in (energy 2, soreness 7, pain 5) | unchanged | 65 → 51 |
+| Normal day + load spike (ratio 1.8) | small change | 65 → 52 |
+
+Tests: `web/tests/metrics/readiness-v2.test.ts` (13 cases) and the live integration test
+"readiness v2 end-to-end" (a real check-in lowers readiness through `refresh-snapshot`).
+
+### v2 limitations
+
+* Needs ≥ 4 days of history per signal; new users see "Not enough data" for the first days.
+* Weights and point scales are reasoned defaults, not clinically validated. They are
+  constants at the top of `readiness-v2.ts` so they can be tuned with real coaching data.
+* Workout load still uses the health+ `estimateWorkoutLoad` (heart-rate based); strength
+  sessions without heart rate are under-counted.
+
+## 5. The sufficiency layer
 
 The original engine **always returns a number**: missing inputs are replaced by neutral
 constants (HRV score 60, RHR score 60, sleep 55, nutrition 55, mobility 60, cardio 45,
@@ -74,11 +133,11 @@ banner that is acceptable; on a coach platform it would be read as a measurement
 | Every input that fell back to an engine default | Listed in `defaultedInputs` and shown in the UI ("Not measured — the estimate used a neutral default for: nutrition, mobility, …") |
 | `completeness` | share of (3 core values + 3 baselines) present, 0–1 |
 
-Every stored snapshot carries `algorithmVersion =
-fitcheck-readiness@1.0.0+healthplus.668b85d`, `computedAt`, `engineSource` and its
+Every stored snapshot carries `algorithmVersion = fitcheck-readiness@2.0.0`, the original
+composite under `legacy` (`fitcheck-readiness@1.0.0+healthplus.668b85d`), `computedAt`, `engineSource` and its
 completeness.
 
-## 5. Inputs and time windows
+## 6. Inputs and time windows
 
 | Input | Window | Source metric |
 |---|---|---|
@@ -88,14 +147,14 @@ completeness.
 | Steps / active energy targets | 7-day sum / 7 and 28-day trimmed mean | daily buckets |
 | Training load | workouts in the last 28 days; acute = ≤ 7 calendar days | `workout` (duration, avg/max HR, kcal) |
 
-## 6. Known limitations (stated honestly)
+## 7. Known limitations of the original health+ composite
 
 * **Nutrition, mobility, body composition and VO₂max are not synced by default**, so the
   engine uses its neutral defaults for them. These carry small weights in readiness
   (≤ 6 % each) and are always listed under "used a neutral default".
-* **Stress has a +34 constant** in the original formula. With baseline-level HRV/RHR and
-  average sleep it lands around 55–65. This is health+'s behaviour and was kept for
-  equivalence; it is labelled as a physiological-strain estimate, not an emotional state.
+* The original composite (still computed as `legacy`) keeps its +34 stress constant and
+  absolute thresholds by design, so the port stays verifiably equivalent. v2 fixes both
+  for everything that is displayed (section 4).
 * Workout load uses the average/max heart rate of the workout. When max HR is missing the
   original fallback (`avg × 1.12`, then `208 − 0.7 × age`, then 185) is used.
 * Age and biological sex are not uploaded (privacy minimisation), so the engine uses its

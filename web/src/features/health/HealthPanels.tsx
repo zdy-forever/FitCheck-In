@@ -283,7 +283,44 @@ export function HealthSummary({
                 <span className="text-ink-3">{f.dateTime(a.computedAt)}</span>
               </div>
             </div>
+            {a.drivers && a.drivers.length > 0 && a.scores.readiness.value !== null && (
+              <div className="mt-4" data-testid="score-drivers">
+                <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-ink">{t('health.drivers')}</h3>
+                  <span className="text-xs text-ink-3">
+                    {t('health.normalLine')}
+                    {a.signals?.[0] ? ` · ${t('health.personalBaseline', { days: Math.max(...a.signals.map((s) => s.baselineDays)) })}` : ''}
+                  </span>
+                </div>
+                <ul className="flex flex-col gap-1.5">
+                  {a.drivers.map((d) => {
+                    const width = d.impact === 0 ? 0 : Math.max(Math.min(Math.abs(d.impact) * 3, 50), 4)
+                    return (
+                      <li key={d.key} className="grid grid-cols-[minmax(0,1fr)_120px_36px] items-center gap-3 text-sm sm:grid-cols-[minmax(0,1fr)_200px_40px]">
+                        <span className="truncate text-ink-2">{t(`health.driverKeys.${d.key}`)}</span>
+                        <span className="relative h-2 rounded-full bg-sunken" aria-hidden>
+                          <span className="absolute inset-y-0 left-1/2 w-px bg-line-strong" />
+                          {d.impact !== 0 && (
+                            <span
+                              className={clsx('absolute inset-y-0 rounded-full', d.impact > 0 ? 'left-1/2 bg-accent' : 'right-1/2 bg-[var(--series-2)]')}
+                              style={{ width: `${width}%` }}
+                            />
+                          )}
+                        </span>
+                        <span className={clsx('text-right font-medium tabular', d.impact > 0 ? 'text-accent' : d.impact < 0 ? 'text-[var(--series-2)]' : 'text-ink-3')}>
+                          {d.impact > 0 ? '+' : ''}
+                          {d.impact}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            )}
             {defaulted.length > 0 && <p className="mt-3 text-xs text-ink-3">{t('health.defaulted', { list: f.list(defaulted.map((k) => t(`health.inputs.${k}`))) })}</p>}
+            {a.legacy && a.legacy.readiness !== null && (
+              <p className="mt-2 text-xs text-ink-3">{t('health.legacyNote', { readiness: a.legacy.readiness, stress: a.legacy.stress ?? '—' })}</p>
+            )}
           </>
         ) : (
           <EmptyState icon={<Lock className="size-6" />} title={t('health.notShared')} body={t('health.notSharedBody')} />
@@ -396,7 +433,7 @@ export function TrendChart({ title, data, unit, digits = 0, color, baseline, tes
               <XAxis dataKey="day" tickFormatter={fmtDay} tickLine={false} axisLine={false} minTickGap={28} />
               <YAxis domain={domain} tickLine={false} axisLine={false} width={44} tickFormatter={(v: number) => f.num(v, digits)} />
               {baseline !== null && baseline !== undefined && (
-                <ReferenceLine y={baseline} stroke="var(--chart-axis)" strokeDasharray="4 4" label={{ value: t('health.baseline'), position: 'insideTopRight', fontSize: 10, fill: 'var(--chart-axis)' }} />
+                <ReferenceLine y={baseline} stroke="var(--chart-axis)" strokeDasharray="4 4" label={{ value: t('health.usual'), position: 'insideTopRight', fontSize: 10, fill: 'var(--chart-axis)' }} />
               )}
               <Tooltip
                 cursor={{ stroke: 'var(--line-strong)' }}

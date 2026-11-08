@@ -10,6 +10,10 @@ const TZ = 'Australia/Sydney'
 const ctx = { nowMs: NOW, timeZone: TZ }
 const H = 3_600_000
 
+const days = (m: number, a: number) => Array.from({ length: 10 }, (_, i) => ({ day: `2026-10-${String(i + 20).padStart(2, '0')}`, value: m + a * Math.sin(i * 1.7) }))
+const HISTORY = { history: { hrv: days(58, 4), rhr: days(55, 1.5), sleepHours: days(7.1, 0.4) }, load: null }
+const assess = (input: EngineInput, times = {}) => assessReadiness(input, ctx, times, undefined, HISTORY)
+
 const empty: EngineInput = {
   raw: { sleep: {}, nutrients: {}, mobility: {} },
   baselines: { trainingLoad7Day: 0, trainingLoad28Day: 0 },
@@ -55,20 +59,28 @@ describe('assessReadiness — no fake precision', () => {
   })
 
   it('reports "limited" with 2 of 3 core signals', () => {
-    const a = assessReadiness(withCore({ restingHeartRate: undefined }), ctx)
+    const a = assess(withCore({ restingHeartRate: undefined }))
     expect(a.scores.readiness.status).toBe('limited')
     expect(typeof a.scores.readiness.value).toBe('number')
     expect(a.defaultedInputs).toContain('restingHeartRate')
   })
 
-  it('reports "limited" when baselines are missing', () => {
+  it('withholds scores when there is no personal history to compare with', () => {
     const a = assessReadiness(withCore({}, false), ctx)
-    expect(a.scores.readiness.status).toBe('limited')
+    expect(a.scores.readiness).toEqual({ value: null, status: 'insufficient' })
     expect(a.baselineComparison.hrvDeltaPercent).toBeNull()
   })
 
+  it('v2 is primary; the original health+ composite is kept only as a labelled reference', () => {
+    const a = assess(withCore())
+    expect(a.algorithmVersion).toMatch(/^fitcheck-readiness@2\./)
+    expect(a.legacy.algorithmVersion).toMatch(/healthplus\.668b85d$/)
+    expect(typeof a.legacy.readiness).toBe('number')
+    expect(a.drivers.length).toBeGreaterThan(0)
+  })
+
   it('reports "ok" with all core signals and baselines, and computes deltas', () => {
-    const a = assessReadiness(withCore(), ctx)
+    const a = assess(withCore())
     expect(a.scores.readiness.status).toBe('ok')
     expect(a.completeness).toBe(1)
     expect(a.baselineComparison.hrvDeltaPercent).toBeCloseTo(((52 - 58) / 58) * 100, 1)
@@ -78,14 +90,14 @@ describe('assessReadiness — no fake precision', () => {
 
   it('treats stale samples as missing instead of "today"', () => {
     const stale = NOW - 3 * 24 * H
-    const a = assessReadiness(withCore(), ctx, { hrvMs: stale, restingHeartRateMs: stale, sleepEndMs: NOW - 4 * H })
+    const a = assess(withCore(), { hrvMs: stale, restingHeartRateMs: stale, sleepEndMs: NOW - 4 * H })
     expect(a.staleInputs).toEqual(['hrv', 'restingHeartRate'])
     expect(a.scores.readiness).toEqual({ value: null, status: 'insufficient' })
     expect(a.scores.sleep.status).not.toBe('insufficient')
   })
 
   it('fatigue/load fields are null without workouts', () => {
-    const a = assessReadiness(withCore(), ctx)
+    const a = assess(withCore())
     expect(a.scores.fatigue.value).toBeNull()
     expect(a.training.acuteChronicRatio).toBeNull()
     expect(a.training.loadStatus).toBeNull()
@@ -97,7 +109,7 @@ describe('assessReadiness — no fake precision', () => {
       withCore({ heartRateVariabilitySDNN: 400, restingHeartRate: 20, sleep: { totalHours: 23 } }),
     ]
     for (const input of extremes) {
-      for (const s of Object.values(assessReadiness(input, ctx).scores)) {
+      for (const s of Object.values(assess(input).scores)) {
         if (s.value !== null) {
           expect(s.value).toBeGreaterThanOrEqual(0)
           expect(s.value).toBeLessThanOrEqual(100)
