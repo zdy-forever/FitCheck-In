@@ -2,7 +2,7 @@
 
 **Know your body. Train smarter. · 了解身体状态，让每次训练更合理。**
 
-A bilingual (English / 简体中文) personal-trainer platform: clients check in before
+A trilingual (English / 简体中文 / 繁體中文) personal-trainer platform: clients check in before
 training, optionally share Apple Health data from their iPhone, and trainers see it all
 on a real-time dashboard alongside session logs, notes and feedback.
 
@@ -42,7 +42,7 @@ FitCheck-In/
 │  │  ├─ components/{ui,layout} Reusable UI (Button, Field, Scale, Modal, Toast, Skeleton…), app shell
 │  │  ├─ features/              auth, checkins, sessions, health (domain components)
 │  │  ├─ pages/                 landing, auth, trainer, client, shared
-│  │  ├─ i18n/locales/          en.ts, zh-CN.ts (typed; zh must have every en key)
+│  │  ├─ i18n/locales/          en.ts, zh-CN.ts, zh-TW.ts (typed; each must have every en key)
 │  │  ├─ lib/                   supabase client, typed API layer, generated DB types, formatting, theme
 │  │  └─ styles/index.css       design tokens (light/dark), glass materials, reduced-motion/transparency
 │  └─ tests/                    unit (vitest), integration (live stack), e2e (Playwright), fixtures
@@ -215,7 +215,7 @@ switch language and theme. Full script: [`docs/TESTING.md`](docs/TESTING.md).
 - [x] Extra Apple Health data (SpO₂, respiratory rate, wrist temperature, VO₂ max, heart-rate recovery, running/cycling dynamics, distances, flights, mobility, body) with 8 fitness & health score cards
 - [x] Per-category redaction of health snapshots for trainers (server-side)
 - [x] Demo mode with simulated, labelled, isolated data
-- [x] EN / 简体中文 everywhere, browser default, instant switch, persisted
+- [x] EN / 简体中文 / 繁體中文 (Taiwan wording) everywhere; browser default (zh-TW/HK/MO/Hant → Traditional), instant switch, saved to the account
 - [x] Light / dark / system theme; reduced motion & reduced transparency fallbacks
 - [x] Responsive desktop / tablet / phone (floating tab bar on mobile)
 

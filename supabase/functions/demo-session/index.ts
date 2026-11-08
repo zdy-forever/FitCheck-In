@@ -1,5 +1,5 @@
 /**
- * POST /functions/v1/demo-session  { "locale": "en" | "zh-CN", "timeZone": "Australia/Sydney" }
+ * POST /functions/v1/demo-session  { "locale": "en" | "zh-CN" | "zh-TW", "timeZone": "Australia/Sydney" }
  *
  * Creates an isolated demo workspace for one visitor:
  *   - a demo trainer and a demo client (profiles.is_demo = true)
@@ -52,6 +52,15 @@ const TEXT = {
     privateNote: '如果酸痛加重，关注左膝情况。（演示私密笔记）',
     exercises: [['杠铃深蹲', 5, 5, 80], ['罗马尼亚硬拉', 3, 8, 70], ['行走箭步蹲', 3, 12, 16]] as const,
   },
+  'zh-TW': {
+    trainer: '示範教練 Alex',
+    client: '示範學員 Sam',
+    sessions: ['下肢肌力', '上肢推拉', '體能間歇'],
+    goals: ['改善深蹲深度', '推舉時保護肩膀', '間歇訓練維持配速'],
+    note: '深蹲核心收得很好，離心階段繼續控制節奏。（示範筆記）',
+    privateNote: '如果痠痛加劇，留意左膝狀況。（示範私人筆記）',
+    exercises: [['槓鈴深蹲', 5, 5, 80], ['羅馬尼亞硬舉', 3, 8, 70], ['行進弓箭步', 3, 12, 16]] as const,
+  },
 }
 
 Deno.serve(async (req) => {
@@ -65,7 +74,7 @@ Deno.serve(async (req) => {
   } catch {
     /* empty body is fine */
   }
-  const locale = body.locale === 'zh-CN' ? 'zh-CN' : 'en'
+  const locale = body.locale === 'zh-CN' || body.locale === 'zh-TW' ? body.locale : 'en'
   const timeZone = body.timeZone && isValidTimeZone(body.timeZone) ? body.timeZone : 'UTC'
   const t = TEXT[locale]
 

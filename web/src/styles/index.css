@@ -62,6 +62,7 @@
     'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   --font-display: 'Inter Tight', 'Inter', ui-sans-serif, system-ui, -apple-system, 'SF Pro Display', 'PingFang SC',
     'Noto Sans SC', sans-serif;
+  --font-cjk-tc: 'PingFang TC', 'PingFang HK', 'Microsoft JhengHei', 'Noto Sans TC', 'Noto Sans CJK TC';
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -210,7 +211,13 @@
   p {
     text-wrap: pretty;
   }
-  :lang(zh-CN) body {
+  :lang(zh-TW) body {
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'SF Pro Text', 'Segoe UI', var(--font-cjk-tc), sans-serif;
+  }
+  :lang(zh-TW) .font-display {
+    font-family: 'Inter Tight', 'Inter', ui-sans-serif, system-ui, -apple-system, 'SF Pro Display', var(--font-cjk-tc), sans-serif;
+  }
+  :lang(zh) body {
     letter-spacing: 0.01em;
     line-height: 1.65;
   }

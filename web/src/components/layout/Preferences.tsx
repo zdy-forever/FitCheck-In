@@ -2,7 +2,7 @@ import { Check, Languages, Monitor, Moon, Sun } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/features/auth/AuthProvider'
-import { LANGUAGES, normalizeLanguage, type Language } from '@/i18n'
+import { chooseLanguage, LANGUAGES, normalizeLanguage, type Language } from '@/i18n'
 import { supabase } from '@/lib/supabase'
 import { useTheme, type ThemePreference } from '@/lib/theme'
 
@@ -33,7 +33,7 @@ export function LanguageSwitcher() {
 
   const choose = async (lng: Language) => {
     setOpen(false)
-    await i18n.changeLanguage(lng) // persisted to localStorage by the detector
+    await chooseLanguage(lng)
     if (profile && profile.locale !== lng) {
       // Sync preference to the account; failure is non-blocking.
       await supabase.from('profiles').update({ locale: lng }).eq('id', profile.id)

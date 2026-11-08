@@ -12,7 +12,7 @@ import { ErrorNotice } from '@/components/ui/ErrorNotice'
 import { useToast } from '@/components/ui/Toast'
 import { useAuth, useProfile } from '@/features/auth/AuthProvider'
 import { useLiveQuery } from '@/hooks/useLiveQuery'
-import { LANGUAGES, normalizeLanguage, type Language } from '@/i18n'
+import { chooseLanguage, LANGUAGES, normalizeLanguage, type Language } from '@/i18n'
 import { api, type HealthCategory, type RelationshipWithPeer, type SharingPermission } from '@/lib/api'
 import { errorKey } from '@/lib/errors'
 import { useFormatters } from '@/lib/format'
@@ -263,7 +263,7 @@ export function SettingsPage() {
     setSaving(true)
     try {
       await api.updateProfile(me.id, { display_name: name.trim(), bio: bio.trim() || null, time_zone: tz, locale: lang, ...(me.role === 'client' ? { birth_year: by, sex: sex === 'female' || sex === 'male' ? sex : null } : {}) })
-      await i18n.changeLanguage(lang)
+      await chooseLanguage(lang)
       await refreshProfile()
       toast.success(t('settings.saved'))
     } catch (er) {
