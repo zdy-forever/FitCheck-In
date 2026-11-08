@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>FitCheck-In</title>
+    <script>
+      // GitHub Pages has no SPA fallback. Send deep links (e.g. /FitCheck-In/import/CODE) to the
+      // right app root with the original path in ?__p=, which index.html restores.
+      ;(function () {
+        var repo = '/' + location.pathname.split('/')[1]
+        var rest = location.pathname.slice(repo.length)
+        var root = repo + '/'
+        if (rest === '/before' || rest.indexOf('/before/') === 0) {
+          root = repo + '/before/'
+          rest = rest.slice('/before'.length)
+        }
+        var q = location.search ? '&' + location.search.slice(1) : ''
+        location.replace(root + '?__p=' + encodeURIComponent(rest || '/') + q + location.hash)
+      })()
+    </script>
+  </head>
+  <body></body>
+</html>

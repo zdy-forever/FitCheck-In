@@ -11,6 +11,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700&display=swap" rel="stylesheet" />
     <title>FitCheck-In · Know your body. Train smarter.</title>
     <script>
+      // GitHub Pages has no SPA fallback: 404.html redirects deep links to the app root as
+      // ?__p=/original/path; put the real path back before the router starts.
+      ;(function () {
+        var q = new URLSearchParams(location.search)
+        var p = q.get('__p')
+        if (p === null) return
+        q.delete('__p')
+        var s = q.toString()
+        history.replaceState(null, '', location.pathname.replace(/\/$/, '') + p + (s ? '?' + s : '') + location.hash)
+      })()
+    </script>
+    <script>
       // Apply theme before first paint to avoid a flash.
       try {
         var p = localStorage.getItem('fitcheckin.theme')

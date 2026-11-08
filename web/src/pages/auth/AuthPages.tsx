@@ -13,7 +13,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { homeFor } from '@/features/auth/guards'
 import { normalizeLanguage } from '@/i18n'
-import { env, isConfigured } from '@/lib/env'
+import { appUrl, env, isConfigured } from '@/lib/env'
 import { errorKey } from '@/lib/errors'
 import { browserTimeZone } from '@/lib/format'
 import { supabase, type Enums } from '@/lib/supabase'
@@ -143,7 +143,7 @@ export function RoleAuthPage() {
           password: parsed.data.password,
           options: {
             data: { role, display_name: parsed.data.name, locale: normalizeLanguage(i18n.language), time_zone: browserTimeZone() },
-            emailRedirectTo: `${window.location.origin}/auth/${role}`,
+            emailRedirectTo: appUrl(`/auth/${role}`),
           },
         })
         if (error) throw error

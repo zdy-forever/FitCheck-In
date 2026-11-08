@@ -136,6 +136,15 @@ All of the above were run and passed during development; see the final report fo
    The app refuses to start if a service-role/secret key is supplied by mistake.
 3. Deploy, then add the Vercel URL to Supabase Auth redirect URLs (step 4.4).
 
+### Or: GitHub Pages (both branches)
+
+`.github/workflows/pages.yml` builds `main` to `https://<owner>.github.io/<repo>/` and the
+Slide 6 "before" branch `demo/before-validation-feedback` to `…/<repo>/before/`, both against the
+same hosted Supabase project. Set repository **variables** (not secrets — they are public)
+`SUPABASE_URL` and `SUPABASE_ANON_KEY`, set Pages → Source = GitHub Actions, and add both URLs to
+Supabase Auth redirect URLs. Deep links work through `tools/pages/404.html` (Pages has no SPA
+fallback); `VITE_BASE` sets the sub-path at build time.
+
 ## 6. Apple Health integration
 
 Apple offers no web or cloud API for Health data; only on-device apps can read HealthKit.
