@@ -1,8 +1,9 @@
 import { clsx } from 'clsx'
-import { Activity, AlertTriangle, BedDouble, CheckCircle2, CircleSlash, Dumbbell, FlaskConical, HeartPulse, Info, Lock, Smartphone, Table2 } from 'lucide-react'
+import { Activity, AlertTriangle, BedDouble, CheckCircle2, ChevronRight, CircleSlash, Dumbbell, FlaskConical, HeartPulse, Info, Lock, Smartphone, Table2 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router'
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Badge } from '@/components/ui/Badge'
 import { AnimatedNumber } from '@/components/ui/AnimatedNumber'
@@ -45,7 +46,7 @@ function Explain({ text }: { text: string }) {
       <button type="button" className="grid size-5 place-items-center rounded-full text-ink-3 hover:text-ink focus-visible:text-ink" aria-label={text}>
         <Info className="size-3.5" aria-hidden />
       </button>
-      <span role="tooltip" className="glass-strong pointer-events-none absolute bottom-7 left-1/2 z-30 w-[min(16rem,calc(100vw-2rem))] -translate-x-1/2 translate-y-1 rounded-xl p-3 text-xs font-normal leading-relaxed text-ink-2 opacity-0 transition-all duration-200 group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100 max-sm:left-auto max-sm:right-[-0.5rem] max-sm:translate-x-0">
+      <span role="tooltip" className="glass-strong pointer-events-none absolute whitespace-normal bottom-7 left-1/2 z-30 w-[min(16rem,calc(100vw-2rem))] -translate-x-1/2 translate-y-1 rounded-xl p-3 text-xs font-normal leading-relaxed text-ink-2 opacity-0 transition-all duration-200 group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100 max-sm:left-auto max-sm:right-[-0.5rem] max-sm:translate-x-0">
         {text}
       </span>
     </span>
@@ -123,15 +124,77 @@ function MeasuredTile({
   )
 }
 
+/**
+ * Dashboard version of the health section: just readiness, recovery, stress and sleep score,
+ * with a link to the full Health view (measured values, drivers, trends, fitness scores).
+ * Visibility follows the same per-category sharing as the full view (the server already
+ * strips what isn't granted; this only renders "not shared" instead of "no data").
+ */
+export function HealthAtAGlance({ snapshot, shared, healthHref }: { snapshot: Snapshot | null; shared: Set<string>; healthHref: string }) {
+  const { t, i18n } = useTranslation()
+  const f = useFormatters(i18n.language)
+  const a = snapshot?.assessment
+  const more = (
+    <Link to={healthHref} className="group inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline" data-testid="health-see-all">
+      {t('health.seeAll')}
+      <ChevronRight className="nudge-x size-4" aria-hidden />
+    </Link>
+  )
+  return (
+    <Card data-testid="health-glance">
+      <CardHeader
+        title={t('health.glance')}
+        subtitle={a ? <span className="whitespace-nowrap">{`${t('health.updated')} ${f.relative(a.computedAt)}`}</span> : undefined}
+        icon={<HeartPulse className="size-5" />}
+        action={
+          <div className="flex items-center gap-2">
+            <DemoBadge show={snapshot?.origin === 'demo'} />
+            <span className="max-sm:hidden">{more}</span>
+          </div>
+        }
+      />
+      {!a ? (
+        <p className="text-sm text-ink-3">{t('health.noData')}</p>
+      ) : !shared.has('scores') ? (
+        <p className="flex items-center gap-2 text-sm text-ink-3">
+          <Lock className="size-4" aria-hidden />
+          {t('health.notShared')}
+        </p>
+      ) : (
+        <>
+          <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <ScoreTile label={t('health.readiness')} explain={t('health.readinessExplain')} score={a.scores.readiness} />
+            <ScoreTile label={t('health.recovery')} explain={t('health.recoveryExplain')} score={a.scores.recovery} />
+            <ScoreTile label={t('health.stress')} explain={t('health.stressExplain')} score={a.scores.stress} inverted />
+            {shared.has('sleep') ? (
+              <ScoreTile label={t('health.sleepScore')} explain={t('health.sleepScoreExplain')} score={a.scores.sleep} />
+            ) : (
+              <div className="flex flex-col gap-2 rounded-2xl border border-dashed border-line p-4 text-sm text-ink-3">
+                <span className="font-medium text-ink-2">{t('health.sleepScore')}</span>
+                <span className="flex items-center gap-1.5">
+                  <Lock className="size-3.5" aria-hidden />
+                  {t('health.notShared')}
+                </span>
+              </div>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-ink-3">{t('health.glanceDisclaimer')}</p>
+        </>
+      )}
+      <div className="mt-3 sm:hidden">{more}</div>
+    </Card>
+  )
+}
+
 function ScoreTile({ label, explain, score, inverted }: { label: string; explain: string; score: ScoreResult | undefined; inverted?: boolean }) {
   const { t } = useTranslation()
   const s = score ?? { value: null, status: 'insufficient' as const }
   const pct = s.value ?? 0
   return (
     <div className="lift flex flex-col gap-3 rounded-2xl border border-line bg-surface-strong p-4" data-testid={`score-${label}`}>
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1 text-sm font-medium text-ink-2">
-          {label}
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
+        <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-ink-2">
+          <span className="whitespace-nowrap">{label}</span>
           <Explain text={explain} />
         </span>
         <StatusBadge status={s.status} />
@@ -322,9 +385,6 @@ export function HealthSummary({
               </div>
             )}
             {defaulted.length > 0 && <p className="mt-3 text-xs text-ink-3">{t('health.defaulted', { list: f.list(defaulted.map((k) => t(`health.inputs.${k}`))) })}</p>}
-            {a.legacy && a.legacy.readiness !== null && (
-              <p className="mt-2 text-xs text-ink-3">{t('health.legacyNote', { readiness: a.legacy.readiness, stress: a.legacy.stress ?? '—' })}</p>
-            )}
           </>
         ) : (
           <EmptyState icon={<Lock className="size-6" />} title={t('health.notShared')} body={t('health.notSharedBody')} />

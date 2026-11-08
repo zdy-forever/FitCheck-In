@@ -13,9 +13,9 @@ import {
   WifiOff,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
-import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { Link, NavLink, useLocation, useNavigate, useOutlet } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth, useProfile } from '@/features/auth/AuthProvider'
 import { useOnline } from '@/hooks/useOnline'
 import { useToast } from '@/components/ui/Toast'
@@ -129,7 +129,7 @@ export function AppShell() {
       <main id="main" className="mx-auto max-w-7xl px-4 pb-32 pt-6 sm:px-6 sm:pt-10 lg:pb-16">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}>
-            <Outlet />
+            <FrozenOutlet />
           </motion.div>
         </AnimatePresence>
       </main>
@@ -152,4 +152,16 @@ export function AppShell() {
       </nav>
     </div>
   )
+}
+
+/**
+ * The route element captured when this page mounted. A plain <Outlet /> inside the exiting
+ * page of AnimatePresence would render the *new* route during the exit animation, mounting
+ * the next page twice (double data fetch, visible re-mount). Freezing it per page key keeps
+ * the old page on screen while it fades out.
+ */
+function FrozenOutlet() {
+  const outlet = useOutlet()
+  const [frozen] = useState(outlet)
+  return frozen
 }

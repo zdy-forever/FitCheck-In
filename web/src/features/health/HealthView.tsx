@@ -7,7 +7,7 @@ import { useLiveQuery } from '@/hooks/useLiveQuery'
 import { api, type HealthCategory } from '@/lib/api'
 import { useFormatters } from '@/lib/format'
 import { FitnessPanel } from './FitnessPanel'
-import { dailySeries, HealthSummary, TrendChart } from './HealthPanels'
+import { dailySeries, HealthAtAGlance, HealthSummary, TrendChart } from './HealthPanels'
 
 const ALL: HealthCategory[] = ['scores', 'hrv', 'resting_heart_rate', 'heart_rate', 'sleep', 'activity', 'workouts', 'vo2_max', 'vitals', 'mobility', 'body']
 
@@ -84,4 +84,24 @@ export function HealthView({ userId, timeZone, viewerTrainerId, lastSyncAt }: { 
       )}
     </div>
   )
+}
+
+/** Dashboard health section (readiness, recovery, stress, sleep score) linking to the full view. */
+export function HealthGlance({ userId, viewerTrainerId, healthHref }: { userId: string; viewerTrainerId?: string; healthHref: string }) {
+  const q = useLiveQuery(
+    `health-glance:${userId}:${viewerTrainerId ?? 'self'}`,
+    async () => {
+      const [snapshot, sharing] = await Promise.all([
+        api.latestSnapshot(userId),
+        viewerTrainerId ? api.sharing({ clientId: userId, trainerId: viewerTrainerId }) : Promise.resolve(null),
+      ])
+      return { snapshot, sharing }
+    },
+    ['health_snapshots', 'health_sharing_permissions'],
+  )
+  if (q.loading) return <CardSkeleton lines={3} />
+  if (q.error || !q.data) return <ErrorNotice error={q.error} onRetry={() => void q.reload()} />
+  const { snapshot, sharing } = q.data
+  const shared = new Set<string>(sharing ? sharing.filter((s) => s.granted).map((s) => s.category) : ALL)
+  return <HealthAtAGlance snapshot={snapshot} shared={shared} healthHref={healthHref} />
 }

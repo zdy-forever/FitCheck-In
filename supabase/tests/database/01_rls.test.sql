@@ -1,7 +1,7 @@
 -- pgTAP Row Level Security tests. Run with: npx supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(82);
+select plan(86);
 
 -- ─────────────────────────── fixtures (as superuser) ─────────────────
 -- Users are created through auth.users so the real handle_new_user trigger runs.
@@ -195,7 +195,7 @@ select throws_ok($$insert into public.health_samples (user_id, sample_id, metric
 select pg_temp.as_admin();
 insert into public.health_snapshots (user_id, snapshot_date, time_zone, algorithm_version, completeness, assessment) values
   ('00000000-0000-0000-0000-0000000000c1', current_date, 'UTC', 'test', 1,
-   '{"scores":{"readiness":{"value":70}},"latest":{"hrv":{"value":48},"restingHeartRate":{"value":56}},"signals":[1],"fitness":{"vitals":{"x":1},"cardio":{"x":1}},"rawSummary":{"sleepHours":7,"baselines":{"hrv":50,"sleepHours":7}}}');
+   '{"scores":{"readiness":{"value":70},"sleep":{"value":80},"hrvVsBaseline":{"value":60},"restingHeartRateVsBaseline":{"value":55}},"latest":{"hrv":{"value":48},"restingHeartRate":{"value":56}},"signals":[1],"fitness":{"vitals":{"x":1},"cardio":{"x":1}},"rawSummary":{"sleepHours":7,"baselines":{"hrv":50,"sleepHours":7}}}');
 
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
 select is((select count(*)::int from public.health_samples), 2, 'trainer A sees only granted categories (hrv + sleep, not RHR)');
@@ -205,6 +205,8 @@ select is((public.client_health_snapshot('00000000-0000-0000-0000-0000000000c1')
 select ok((public.client_health_snapshot('00000000-0000-0000-0000-0000000000c1') -> 'assessment' #> '{latest,restingHeartRate}') is null, 'ungranted resting HR is stripped');
 select ok((public.client_health_snapshot('00000000-0000-0000-0000-0000000000c1') -> 'assessment' #> '{fitness,vitals}') is null, 'ungranted vitals are stripped');
 select ok((public.client_health_snapshot('00000000-0000-0000-0000-0000000000c1') -> 'assessment' -> 'signals') is null, 'raw signals are never sent to trainers');
+select is((public.client_health_snapshot('00000000-0000-0000-0000-0000000000c1') -> 'assessment' #> '{scores,sleep,value}')::int, 80, 'sleep score returned when sleep is granted');
+select ok((public.client_health_snapshot('00000000-0000-0000-0000-0000000000c1') -> 'assessment' #> '{scores,restingHeartRateVsBaseline}') is null, 'resting-HR sub-score stripped when resting HR is not granted');
 
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000b1');
 select ok(public.client_health_snapshot('00000000-0000-0000-0000-0000000000c1') is null, 'trainer without grants gets no snapshot');
@@ -221,6 +223,8 @@ select pg_temp.as_user('00000000-0000-0000-0000-0000000000c1');
 update public.health_sharing_permissions set granted = false where trainer_id = '00000000-0000-0000-0000-0000000000a1' and category = 'hrv';
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
 select is((select count(*)::int from public.health_samples), 1, 'after revoking HRV, trainer A sees only sleep');
+select ok((public.client_health_snapshot('00000000-0000-0000-0000-0000000000c1') -> 'assessment' #> '{scores,hrvVsBaseline}') is null, 'HRV sub-score stripped after revoking HRV');
+select is((public.client_health_snapshot('00000000-0000-0000-0000-0000000000c1') -> 'assessment' #> '{scores,readiness,value}')::int, 70, 'readiness still returned (scores granted)');
 update public.health_sharing_permissions set granted = true;
 select is((select count(*)::int from public.health_sharing_permissions where granted), 2, 'trainer cannot grant themselves access (RLS filters the update)');
 

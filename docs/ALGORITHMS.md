@@ -177,7 +177,9 @@ heart-rate recovery produced a fake "−6.9 bpm per month" during development.)
 granted (scores, HRV, resting HR, sleep, activity, workouts, VO₂ max, heart rate,
 vitals, mobility, body) and never the raw per-signal data. This fixed an issue where a
 trainer granted only "readiness estimates" could read raw HRV/sleep values from the
-snapshot JSON via the API. Enforced and tested in pgTAP and integration tests.
+snapshot JSON via the API. Single-signal scores follow their signal too: the sleep score
+needs "sleep", the HRV and resting-HR sub-scores need "hrv" / "resting heart rate", even
+when "readiness estimates" is granted. Enforced and tested in pgTAP and integration tests.
 
 ## 4d. Check-in pre-fill from Apple Watch
 
@@ -235,9 +237,9 @@ completeness.
 * **Nutrition, mobility, body composition and VO₂max are not synced by default**, so the
   engine uses its neutral defaults for them. These carry small weights in readiness
   (≤ 6 % each) and are always listed under "used a neutral default".
-* The original composite (still computed as `legacy`) keeps its +34 stress constant and
-  absolute thresholds by design, so the port stays verifiably equivalent. v2 fixes both
-  for everything that is displayed (section 4).
+* The original composite (still computed and stored as `legacy`, no longer shown in the UI)
+  keeps its +34 stress constant and absolute thresholds by design, so the port stays
+  verifiably equivalent. v2 fixes both for everything that is displayed (section 4).
 * Workout load uses the average/max heart rate of the workout. When max HR is missing the
   original fallback (`avg × 1.12`, then `208 − 0.7 × age`, then 185) is used.
 * Age and biological sex are not uploaded (privacy minimisation), so the engine uses its

@@ -36,7 +36,7 @@ import { CardSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { useToast } from '@/components/ui/Toast'
 import { useProfile } from '@/features/auth/AuthProvider'
 import { attentionReasons, CheckinCard } from '@/features/checkins/CheckinCard'
-import { HealthView } from '@/features/health/HealthView'
+import { HealthGlance, HealthView } from '@/features/health/HealthView'
 import { NoteEditor } from '@/features/sessions/NoteEditor'
 import { SessionEditor } from '@/features/sessions/SessionEditor'
 import { useLiveQuery } from '@/hooks/useLiveQuery'
@@ -485,7 +485,7 @@ export function TrainerClientDetail() {
             <NoteEditor trainerId={me.id} clientId={clientId} sessions={sessions} onSaved={() => void q.reload()} />
           </Card>
           <div className="lg:col-span-2">
-            <HealthView userId={clientId} timeZone={profile.time_zone} viewerTrainerId={me.id} lastSyncAt={rel.health_last_sync_at} />
+            <HealthGlance userId={clientId} viewerTrainerId={me.id} healthHref={`/trainer/clients/${clientId}?tab=health`} />
           </div>
         </div>
       )}

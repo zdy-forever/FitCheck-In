@@ -27,7 +27,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useProfile } from '@/features/auth/AuthProvider'
 import { CheckinCard } from '@/features/checkins/CheckinCard'
 import { CheckinForm } from '@/features/checkins/CheckinForm'
-import { HealthView } from '@/features/health/HealthView'
+import { HealthGlance, HealthView } from '@/features/health/HealthView'
 import { FeedbackModal } from '@/features/sessions/FeedbackForm'
 import { useLiveQuery } from '@/hooks/useLiveQuery'
 import { api, type SessionWithDetails } from '@/lib/api'
@@ -146,7 +146,7 @@ export function ClientDashboard() {
         <TrainersCard relationships={relationships} onChanged={() => void q.reload()} />
       </div>
       <div className="mt-4">
-        <HealthView userId={me.id} timeZone={me.time_zone} />
+        <HealthGlance userId={me.id} healthHref="/client/health" />
       </div>
     </div>
   )

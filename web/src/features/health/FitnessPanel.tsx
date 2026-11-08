@@ -375,7 +375,7 @@ export function FitnessPanel({ snapshot, shared }: { snapshot: Snapshot; shared:
   if (cards.length === 0) return null
   return (
     <Card data-testid="fitness-panel">
-      <CardHeader title={t('health.fit.title')} subtitle={t('health.fit.subtitle')} icon={<HeartPulse className="size-5" />} action={<DemoBadge show={snapshot.origin === 'demo'} />} />
+      <CardHeader title={t('health.fit.title')} icon={<HeartPulse className="size-5" />} action={<DemoBadge show={snapshot.origin === 'demo'} />} />
       <div className="stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{cards}</div>
     </Card>
   )
