@@ -228,7 +228,9 @@ export const api = {
     return unwrap(await q)
   },
   async setSharing(id: string, granted: boolean) {
-    unwrap(await supabase.from('health_sharing_permissions').update({ granted }).eq('id', id))
+    // RLS turns a disallowed update into "0 rows, no error"; confirm the row was actually written.
+    const rows = unwrap(await supabase.from('health_sharing_permissions').update({ granted }).eq('id', id).select('id, granted'))
+    if (rows.length !== 1 || rows[0]!.granted !== granted) throw Object.assign(new Error('sharing_not_updated'), { code: '42501' })
   },
   async deleteMyHealthData() {
     return unwrap(await supabase.rpc('delete_my_health_data')) as { samples: number; snapshots: number; devices: number }

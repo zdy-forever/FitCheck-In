@@ -19,18 +19,32 @@ import { useFormatters } from '@/lib/format'
 
 export const CATEGORIES: HealthCategory[] = ['scores', 'hrv', 'resting_heart_rate', 'sleep', 'heart_rate', 'activity', 'workouts', 'vo2_max', 'vitals', 'mobility', 'body']
 
-function Toggle({ checked, onChange, label, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
+function Toggle({ checked, onChange, label, disabled, busy }: { checked: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean; busy?: boolean }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      aria-busy={busy || undefined}
       disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={clsx('relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-50', checked ? 'bg-accent' : 'bg-line-strong')}
+      onClick={() => !busy && onChange(!checked)}
+      data-testid="toggle"
+      className={clsx(
+        'relative h-7 w-12 shrink-0 cursor-pointer rounded-full p-0 transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50',
+        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+        checked ? 'bg-accent' : 'bg-line-strong',
+        busy && 'opacity-70',
+      )}
     >
-      <span className={clsx('absolute top-0.5 size-6 rounded-full bg-white shadow transition-transform duration-200', checked ? 'translate-x-[22px]' : 'translate-x-0.5')} />
+      {/* Anchored with explicit top/left (a button centres its content otherwise) and moved with
+          `transform`, not Tailwind's `translate-*`: the reduced-motion stylesheet resets the
+          `translate` property, which would freeze the knob and hide the on/off state. */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute top-0.5 left-0.5 size-6 rounded-full bg-white shadow transition-transform duration-200 ease-out"
+        style={{ transform: checked ? 'translateX(20px)' : 'translateX(0)' }}
+      />
     </button>
   )
 }
@@ -215,13 +229,21 @@ export function SettingsPage() {
   const [confirmText, setConfirmText] = useState('')
   const [busy, setBusy] = useState(false)
 
+  // Optimistic switch state: flips immediately, locks while the write is in flight, and
+  // falls back to the server value (via reload) if the write fails.
+  const [pendingShare, setPendingShare] = useState<Record<string, boolean>>({})
   const toggleShare = async (id: string, granted: boolean) => {
+    if (id in pendingShare) return
+    setPendingShare((p) => ({ ...p, [id]: granted }))
     try {
       await api.setSharing(id, granted)
-      toast.success(t('settings.sharingUpdated'))
       await sharingQ.reload()
+      toast.success(t('settings.sharingUpdated'))
     } catch (er) {
       toast.error(t(errorKey(er)))
+      await sharingQ.reload()
+    } finally {
+      setPendingShare(({ [id]: _, ...rest }) => rest)
     }
   }
 
@@ -288,7 +310,12 @@ export function SettingsPage() {
                         return (
                           <li key={c} className="flex items-center justify-between gap-3 px-4 py-2.5">
                             <span className="text-sm text-ink-2">{t(`settings.categories.${c}`)}</span>
-                            <Toggle checked={perm.granted} label={`${r.peer?.display_name}: ${t(`settings.categories.${c}`)}`} onChange={(v) => void toggleShare(perm.id, v)} />
+                            <Toggle
+                              checked={pendingShare[perm.id] ?? perm.granted}
+                              busy={perm.id in pendingShare}
+                              label={`${r.peer?.display_name}: ${t(`settings.categories.${c}`)}`}
+                              onChange={(v) => void toggleShare(perm.id, v)}
+                            />
                           </li>
                         )
                       })}

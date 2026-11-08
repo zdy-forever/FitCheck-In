@@ -33,3 +33,43 @@ test('text colour utilities apply to buttons (base styles must stay in @layer ba
   })
   expect(probe[1]).toBe(probe[0])
 })
+
+for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+  test(`sharing switch: knob stays inside the track and reflects state (reducedMotion=${reducedMotion})`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion })
+    await page.goto('/auth?demo=1')
+    await page.getByTestId('create-demo').click()
+    await page.getByTestId('demo-signin-client').click()
+    await expect(page).toHaveURL(/\/client$/)
+    await page.goto('/client/settings')
+
+    const sw = page.getByTestId('sharing-trainer').first().getByRole('switch').last() // body measurements
+    await expect(sw).toBeVisible()
+
+    const geometry = async () => {
+      const track = (await sw.boundingBox())!
+      const knob = (await sw.locator('span').boundingBox())!
+      return { track, knob }
+    }
+    const check = async (on: boolean) => {
+      await expect(sw).toHaveAttribute('aria-checked', String(on))
+      await expect(sw).not.toHaveAttribute('aria-busy', 'true')
+      await page.waitForTimeout(300) // let the 200ms knob transition settle
+      const { track, knob } = await geometry()
+      expect(knob.x).toBeGreaterThanOrEqual(track.x)
+      expect(knob.x + knob.width).toBeLessThanOrEqual(track.x + track.width + 0.5)
+      const knobCentre = knob.x + knob.width / 2 - track.x
+      if (on) expect(knobCentre).toBeGreaterThan(track.width / 2)
+      else expect(knobCentre).toBeLessThan(track.width / 2)
+    }
+
+    const initial = (await sw.getAttribute('aria-checked')) === 'true'
+    await check(initial)
+    await sw.click()
+    await check(!initial)
+    await page.reload()
+    await check(!initial) // persisted server-side
+    await sw.click()
+    await check(initial)
+  })
+}
