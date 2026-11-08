@@ -18,13 +18,8 @@
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.119.0'
 import { isValidTimeZone } from '../_shared/metrics/calendar.ts'
-import { recomputeSnapshot } from '../_shared/snapshot.ts'
-import {
-  type HealthCategory,
-  type HealthUploadResponse,
-  validateRequestEnvelope,
-  validateSample,
-} from '../_shared/metrics/health-schema.ts'
+import { storeSamples } from '../_shared/ingest.ts'
+import { type HealthUploadResponse, validateRequestEnvelope } from '../_shared/metrics/health-schema.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -90,9 +85,6 @@ Deno.serve(async (req) => {
   const request = envelope.request
   if (!isValidTimeZone(request.timeZone)) return json(400, { error: 'invalid_time_zone' })
 
-  const nowMs = Date.now()
-  const receivedAt = new Date(nowMs).toISOString()
-
   // Register / refresh the device.
   const { data: device, error: devErr } = await admin
     .from('health_sync_devices')
@@ -112,90 +104,15 @@ Deno.serve(async (req) => {
     .single()
   if (devErr || !device) return json(500, { error: 'device_register_failed' })
 
-  const enabled = new Set<HealthCategory>(request.enabledCategories)
-  const rejected: HealthUploadResponse['rejected'] = []
-  const rows: Record<string, unknown>[] = []
-  const seen = new Set<string>()
-  let duplicates = 0
-
-  request.samples.forEach((raw, index) => {
-    const res = validateSample(raw, index, enabled, nowMs)
-    if (!res.ok) {
-      rejected.push(res.issue)
-      return
-    }
-    const s = res.sample
-    const key = `${s.metricType}|${s.sampleId}`
-    if (seen.has(key)) {
-      duplicates++
-      return
-    }
-    seen.add(key)
-    rows.push({
-      user_id: userId,
-      device_id: device.id,
-      sample_id: s.sampleId,
-      metric_type: s.metricType,
-      value: s.value,
-      unit: s.unit,
-      start_at: s.startAt,
-      measured_at: s.measuredAt,
-      received_at: receivedAt,
-      category: s.category ?? null,
-      metadata: s.metadata ?? {},
-      source_name: s.sourceName ?? null,
-      source_bundle: s.sourceBundle ?? null,
-      origin: 'healthkit',
-    })
+  const stored = await storeSamples(admin, {
+    userId,
+    deviceId: device.id,
+    timeZone: request.timeZone,
+    enabledCategories: request.enabledCategories,
+    samples: request.samples,
+    recompute: true,
   })
-
-  // Count which keys already exist so the response can report duplicates honestly.
-  let alreadyStored = 0
-  for (let i = 0; i < rows.length; i += 500) {
-    const chunk = rows.slice(i, i + 500)
-    const ids = chunk.map((r) => r.sample_id as string)
-    const { count } = await admin
-      .from('health_samples')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .in('sample_id', ids)
-    alreadyStored += count ?? 0
-    const { error } = await admin.from('health_samples').upsert(chunk, { onConflict: 'user_id,metric_type,sample_id' })
-    if (error) {
-      await admin
-        .from('health_sync_devices')
-        .update({ last_sync_at: receivedAt, last_sync_status: 'error', last_sync_error: 'storage_failed' })
-        .eq('id', device.id)
-      return json(500, { error: 'storage_failed' })
-    }
-  }
-
-  let snapshot: HealthUploadResponse['snapshot'] = null
-  try {
-    snapshot = await recomputeSnapshot(admin, userId, request.timeZone, nowMs, 'healthkit')
-  } catch {
-    snapshot = null
-  }
-
-  await admin
-    .from('health_sync_devices')
-    .update({
-      last_sync_at: receivedAt,
-      last_sync_status: rejected.length > 0 || snapshot === null ? 'partial' : 'success',
-      last_sync_error: rejected.length > 0 ? `${rejected.length}_samples_rejected` : snapshot === null ? 'snapshot_failed' : null,
-      last_sample_count: rows.length,
-    })
-    .eq('id', device.id)
-
-  // Keep the profile time zone in step with the phone (used for day bucketing).
-  await admin.from('profiles').update({ time_zone: request.timeZone }).eq('id', userId)
-
-  const response: HealthUploadResponse = {
-    accepted: rows.length - alreadyStored,
-    duplicates: duplicates + alreadyStored,
-    rejected: rejected.slice(0, 50),
-    snapshot,
-    receivedAt,
-  }
+  if (!stored.ok) return json(500, { error: stored.error })
+  const response: HealthUploadResponse = stored.response
   return json(200, response)
 })

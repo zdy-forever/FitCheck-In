@@ -16,7 +16,15 @@ export default defineConfig({
       '@shared': shared,
     },
   },
-  server: { port: 5173, fs: { allow: ['..'] } },
+  server: {
+    port: 5173,
+    fs: { allow: ['..'] },
+    // Local phone testing: `npm run dev:lan` exposes the dev server on the LAN and proxies the
+    // local Supabase stack under /sb (REST, auth, functions and the realtime websocket).
+    proxy: {
+      '/sb': { target: 'http://127.0.0.1:54321', changeOrigin: true, ws: true, rewrite: (p) => p.replace(/^\/sb/, '') },
+    },
+  },
   build: {
     target: 'es2022',
     rolldownOptions: {

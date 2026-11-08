@@ -18,7 +18,7 @@ export type Relationship = Tables<'trainer_client_relationships'>
 export type SharingPermission = Tables<'health_sharing_permissions'>
 export type HealthCategory = Enums<'health_category'>
 export type HealthSample = Tables<'health_samples'>
-export type SyncDevice = Tables<'health_sync_devices'>
+export type SyncDevice = Omit<Tables<'health_sync_devices'>, 'import_token_hash'>
 
 export interface StoredAssessment extends ReadinessAssessment {
   fitness?: Partial<FitnessAssessment>
@@ -216,7 +216,13 @@ export const api = {
     )
   },
   async devices(): Promise<SyncDevice[]> {
-    return unwrap(await supabase.from('health_sync_devices').select('*').order('last_sync_at', { ascending: false, nullsFirst: false }))
+    // Explicit columns: the import-token hash is not granted to clients (select * would fail).
+    return unwrap(
+      await supabase
+        .from('health_sync_devices')
+        .select('id, user_id, installation_id, device_name, platform, os_version, app_version, enabled_categories, last_sync_at, last_sync_status, last_sync_error, last_sample_count, revoked_at, created_at, updated_at')
+        .order('last_sync_at', { ascending: false, nullsFirst: false }),
+    ) as SyncDevice[]
   },
   async revokeDevice(id: string) {
     unwrap(await supabase.from('health_sync_devices').update({ revoked_at: new Date().toISOString() }).eq('id', id))

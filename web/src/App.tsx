@@ -18,6 +18,7 @@ const lazyNamed = <T, K extends keyof T>(loader: () => Promise<T>, name: K) =>
 const trainer = () => import('@/pages/trainer/TrainerPages')
 const client = () => import('@/pages/client/ClientPages')
 const shared = () => import('@/pages/shared/SharedPages')
+const healthImport = () => import('@/pages/import/HealthImportPage')
 
 const TrainerDashboard = lazyNamed(trainer, 'TrainerDashboard')
 const TrainerClientsPage = lazyNamed(trainer, 'TrainerClientsPage')
@@ -30,6 +31,7 @@ const ClientHistoryPage = lazyNamed(client, 'ClientHistoryPage')
 const ClientHealthPage = lazyNamed(client, 'ClientHealthPage')
 const SettingsPage = lazyNamed(shared, 'SettingsPage')
 const JoinTrainerPage = lazyNamed(shared, 'JoinTrainerPage')
+const HealthImportPage = lazyNamed(healthImport, 'HealthImportPage')
 
 const s = (el: React.ReactNode) => <Suspense fallback={<FullPageLoader />}>{el}</Suspense>
 
@@ -42,6 +44,9 @@ const router = createBrowserRouter([
       { path: '/auth', element: <ChooseRolePage /> },
       { path: '/auth/:role', element: <RoleAuthPage /> },
       { path: '/invite/:code', element: <InviteLanding /> },
+      // Phone-side Apple Health import: no login session (QR code → upload-only token).
+      { path: '/import', element: s(<HealthImportPage />) },
+      { path: '/import/:code', element: s(<HealthImportPage />) },
       {
         element: <RequireRole role="trainer" />,
         children: [

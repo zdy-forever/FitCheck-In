@@ -432,3 +432,6 @@ verify_jwt = false
 
 [functions.refresh-snapshot]
 verify_jwt = false
+
+[functions.health-import]
+verify_jwt = false

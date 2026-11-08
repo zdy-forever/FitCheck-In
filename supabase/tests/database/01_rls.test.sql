@@ -1,7 +1,7 @@
 -- pgTAP Row Level Security tests. Run with: npx supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(86);
+select plan(93);
 
 -- ─────────────────────────── fixtures (as superuser) ─────────────────
 -- Users are created through auth.users so the real handle_new_user trigger runs.
@@ -239,6 +239,19 @@ select is((select count(*)::int from public.trainer_client_overview() where clie
 -- Client deletes all health data.
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000c1');
 select is((public.delete_my_health_data() ->> 'samples')::int, 3, 'client deletes all stored health samples');
+
+-- Apple Health import pairing (QR → upload-only token).
+create temp table _code as select public.create_health_import_pairing() ->> 'code' as c;
+grant select on _code to authenticated;
+select ok((select c from _code) ~ '^[A-HJ-NP-Z2-9]{16}$', 'client gets a 16-char one-time import code');
+select throws_ok($$select count(*) from public.health_import_pairings$$, '42501', null, 'pairing rows (code hashes) are not accessible to clients at all');
+select throws_ok($$select import_token_hash from public.health_sync_devices$$, '42501', null, 'import token hash column is not readable by clients');
+select lives_ok($$select id, platform, device_name from public.health_sync_devices$$, 'device list (without the hash) stays readable');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
+select throws_ok($$select public.create_health_import_pairing()$$, '42501', 'only_clients_can_import', 'trainers cannot create import codes');
+select pg_temp.as_admin();
+select is((select code_hash from public.health_import_pairings where user_id = '00000000-0000-0000-0000-0000000000c1'), encode(extensions.digest((select c from _code), 'sha256'), 'hex'), 'only the SHA-256 hash of the code is stored');
+select is((select count(*)::int from public.health_import_pairings p where p.code_hash = (select c from _code)), 0, 'the plain code is never stored');
 
 select * from finish();
 rollback;

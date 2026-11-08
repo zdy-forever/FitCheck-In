@@ -23,7 +23,33 @@ export type Database = {
           }
         },"public": {
           Tables: {
-            "health_samples": {
+            "health_import_pairings": {
+                  Row: {
+                    "code_hash": string,"created_at": string,"device_id": string | null,"expires_at": string,"id": string,"used_at": string | null,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "code_hash": string,"created_at"?: string,"device_id"?: string | null,"expires_at": string,"id"?: string,"used_at"?: string | null,"user_id": string
+                  }
+                  Update: {
+                    "code_hash"?: string,"created_at"?: string,"device_id"?: string | null,"expires_at"?: string,"id"?: string,"used_at"?: string | null,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "health_import_pairings_device_id_fkey"
+      columns: ["device_id"]
+isOneToOne: false
+      referencedRelation: "health_sync_devices"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "health_import_pairings_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"health_samples": {
                   Row: {
                     "category": string | null,"device_id": string | null,"id": number,"measured_at": string,"metadata": NonNullable<Json>,"metric_type": string,"origin": Database["public"]['Enums']["data_origin"],"received_at": string,"sample_id": string,"source_bundle": string | null,"source_name": string | null,"start_at": string,"unit": string,"user_id": string,"value": number
                   }
@@ -103,14 +129,14 @@ isOneToOne: false
                   ]
                 },"health_sync_devices": {
                   Row: {
-                    "app_version": string | null,"created_at": string,"device_name": string,"enabled_categories": (Database["public"]['Enums']["health_category"])[],"id": string,"installation_id": string,"last_sample_count": number | null,"last_sync_at": string | null,"last_sync_error": string | null,"last_sync_status": string | null,"os_version": string | null,"platform": string,"revoked_at": string | null,"updated_at": string,"user_id": string
+                    "app_version": string | null,"created_at": string,"device_name": string,"enabled_categories": (Database["public"]['Enums']["health_category"])[],"id": string,"import_token_hash": string | null,"installation_id": string,"last_sample_count": number | null,"last_sync_at": string | null,"last_sync_error": string | null,"last_sync_status": string | null,"os_version": string | null,"platform": string,"revoked_at": string | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "app_version"?: string | null,"created_at"?: string,"device_name"?: string,"enabled_categories"?: (Database["public"]['Enums']["health_category"])[],"id"?: string,"installation_id": string,"last_sample_count"?: number | null,"last_sync_at"?: string | null,"last_sync_error"?: string | null,"last_sync_status"?: string | null,"os_version"?: string | null,"platform"?: string,"revoked_at"?: string | null,"updated_at"?: string,"user_id": string
+                    "app_version"?: string | null,"created_at"?: string,"device_name"?: string,"enabled_categories"?: (Database["public"]['Enums']["health_category"])[],"id"?: string,"import_token_hash"?: string | null,"installation_id": string,"last_sample_count"?: number | null,"last_sync_at"?: string | null,"last_sync_error"?: string | null,"last_sync_status"?: string | null,"os_version"?: string | null,"platform"?: string,"revoked_at"?: string | null,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "app_version"?: string | null,"created_at"?: string,"device_name"?: string,"enabled_categories"?: (Database["public"]['Enums']["health_category"])[],"id"?: string,"installation_id"?: string,"last_sample_count"?: number | null,"last_sync_at"?: string | null,"last_sync_error"?: string | null,"last_sync_status"?: string | null,"os_version"?: string | null,"platform"?: string,"revoked_at"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "app_version"?: string | null,"created_at"?: string,"device_name"?: string,"enabled_categories"?: (Database["public"]['Enums']["health_category"])[],"id"?: string,"import_token_hash"?: string | null,"installation_id"?: string,"last_sample_count"?: number | null,"last_sync_at"?: string | null,"last_sync_error"?: string | null,"last_sync_status"?: string | null,"os_version"?: string | null,"platform"?: string,"revoked_at"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -356,6 +382,9 @@ isOneToOne: false
 "client_health_snapshot":
 { Args: { "p_client": string }; Returns: Json
                            },
+"create_health_import_pairing":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
 "delete_my_account":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
@@ -372,6 +401,9 @@ isOneToOne: false
 { Args: { "p_code": string }; Returns: {
               "expires_at": string,"is_expired": boolean,"status": Database["public"]['Enums']["invitation_status"],"trainer_name": string
             }[]
+                           },
+"health_import_pairing_status":
+{ Args: Record<PropertyKey, never>; Returns: Json
                            },
 "health_metric_category":
 { Args: { "p_metric": string }; Returns: Database["public"]['Enums']["health_category"]

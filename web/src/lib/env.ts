@@ -1,5 +1,10 @@
+/**
+ * `VITE_SUPABASE_URL=same-origin` (local testing on a phone): talk to Supabase through the dev
+ * server's `/sb` proxy, so a phone on the same Wi-Fi only needs to reach this computer.
+ */
+const rawUrl = import.meta.env.VITE_SUPABASE_URL ?? ''
 export const env = {
-  supabaseUrl: import.meta.env.VITE_SUPABASE_URL ?? '',
+  supabaseUrl: rawUrl === 'same-origin' && typeof window !== 'undefined' ? `${window.location.origin}/sb` : rawUrl,
   supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
   demoMode: import.meta.env.VITE_DEMO_MODE === 'true',
 }

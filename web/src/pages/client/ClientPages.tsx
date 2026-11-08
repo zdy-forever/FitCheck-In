@@ -28,6 +28,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useProfile } from '@/features/auth/AuthProvider'
 import { CheckinCard } from '@/features/checkins/CheckinCard'
 import { CheckinForm } from '@/features/checkins/CheckinForm'
+import { ImportQrCard } from '@/features/health-import/ImportQrCard'
 import { HealthGlance, HealthView } from '@/features/health/HealthView'
 import { FeedbackModal } from '@/features/sessions/FeedbackForm'
 import { useLiveQuery } from '@/hooks/useLiveQuery'
@@ -452,16 +453,8 @@ export function ClientHealthPage() {
     <div>
       <PageHeader title={t('health.title')} subtitle={t('health.subtitle')} />
       <div className="flex flex-col gap-4">
+        {!me.is_demo && <ImportQrCard />}
         <HealthView userId={me.id} timeZone={me.time_zone} />
-        <Card>
-          <CardHeader title={t('health.howToConnect')} icon={<Smartphone className="size-5" />} />
-          <ol className="list-decimal space-y-1.5 pl-5 text-sm text-ink-2">
-            {(t('health.howSteps', { returnObjects: true }) as string[]).map((s) => (
-              <li key={s}>{s}</li>
-            ))}
-          </ol>
-          <p className="mt-3 text-xs text-ink-3">{t('health.webNote')}</p>
-        </Card>
       </div>
     </div>
   )

@@ -3,14 +3,15 @@
 **Know your body. Train smarter. · 了解身体状态，让每次训练更合理。**
 
 A trilingual (English / 简体中文 / 繁體中文) personal-trainer platform: clients check in before
-training, optionally share Apple Health data from their iPhone, and trainers see it all
+training, optionally import Apple Health data from their iPhone (in the browser — no app),
+and trainers see it all
 on a real-time dashboard alongside session logs, notes and feedback.
 
 | Layer | Tech |
 |---|---|
 | Web | React 19, TypeScript (strict), Vite 8, Tailwind CSS 4, React Router 8, i18next, Motion, Lucide, Recharts |
 | Backend | Supabase Auth, Postgres 17 + Row Level Security, Realtime, Edge Functions (Deno) |
-| iOS bridge | Swift / SwiftUI / HealthKit module inside the existing `health_monitor_ios` app |
+| Apple Health | iPhone-browser import of the Health export (QR pairing, parsed on the phone). Optional native module in `health_monitor_ios` |
 | Deploy | Vercel (web) + Supabase (everything else) |
 
 ---
@@ -22,7 +23,7 @@ on a real-time dashboard alongside session logs, notes and feedback.
 3. [Tests](#3-tests)
 4. [Supabase setup (hosted)](#4-supabase-setup-hosted)
 5. [Deploy the web app (Vercel)](#5-deploy-the-web-app-vercel)
-6. [iOS / Apple Health integration](#6-ios--apple-health-integration)
+6. [Apple Health integration](#6-apple-health-integration)
 7. [Demo mode for the course video](#7-demo-mode-for-the-course-video)
 8. [Security & privacy model](#8-security--privacy-model)
 9. [Feature status](#9-feature-status)
@@ -50,7 +51,8 @@ FitCheck-In/
 │  ├─ migrations/               schema, RLS + RPCs, demo housekeeping, grants
 │  ├─ tests/database/           pgTAP RLS tests
 │  └─ functions/
-│     ├─ health-ingest/         authenticated Apple Health upload endpoint
+│     ├─ health-ingest/         Apple Health upload (native iOS module, user JWT)
+│     ├─ health-import/         Apple Health import from the iPhone browser (QR pairing + upload-only token)
 │     ├─ demo-session/          creates an isolated demo workspace (simulated data)
 │     ├─ refresh-snapshot/      recomputes a client's snapshot after check-in / feedback / session save
 │     └─ _shared/metrics/       TS port of DerivedMetricsEngine + sufficiency layer (shared with web)
@@ -109,6 +111,7 @@ All of the above were run and passed during development; see the final report fo
 3. Deploy the functions and set secrets:
    ```bash
    npx supabase functions deploy health-ingest
+   npx supabase functions deploy health-import
    npx supabase functions deploy demo-session
    npx supabase functions deploy refresh-snapshot
    npx supabase secrets set DEMO_MODE_ENABLED=true     # false to disable the public demo
@@ -133,9 +136,40 @@ All of the above were run and passed during development; see the final report fo
    The app refuses to start if a service-role/secret key is supplied by mistake.
 3. Deploy, then add the Vercel URL to Supabase Auth redirect URLs (step 4.4).
 
-## 6. iOS / Apple Health integration
+## 6. Apple Health integration
 
-Browsers cannot read HealthKit. The real path is:
+Apple offers no web or cloud API for Health data; only on-device apps can read HealthKit.
+FitCheck-In is web-only, so the primary path uses the iPhone's built-in export:
+
+```
+Computer (signed-in client): Health or Settings → "Show QR code"   (one-time code, 10 min, single use)
+iPhone camera → /import/<code> in Safari → code exchanged for an upload-only import token
+iPhone: Health app → profile → "Export All Health Data" → Save to Files      (the one manual step)
+iPhone browser: choose export.zip → parsed ON THE PHONE (streamed, Web Worker)
+  → only used metrics, last 90 days → Edge Function health-import (validate, dedupe, score)
+  → Postgres (RLS) → computer updates via Realtime
+```
+
+* The export never leaves the phone; only the derived samples are uploaded.
+* The phone never holds a login session. The import token can only upload for that client,
+  is stored hashed, shows up under **Connected devices**, and is revoked with **Unlink device**.
+* Same samples as the native module (metric names, units, sleep stages, workout kinds, daily
+  bucket ids) and the same server validation. Cumulative metrics take the best single source
+  per day so iPhone + Watch are never double-counted. Parser: `web/src/features/health-import/`.
+* Not automatic: clients re-export to update (the page can be added to the home screen).
+* Local test on a real iPhone (same Wi-Fi): `npm --prefix web run dev:lan`, open
+  `http://<your-mac-ip>:5173` on the computer, create the QR there and scan it. `dev:lan`
+  serves the app on the LAN and proxies the local Supabase under `/sb`.
+
+What was verified without a device: parser unit tests on a real-format export (zip and
+xml, multi-source steps, unit conversions, sleep stages, workouts), a 128 MB / 422k-record
+export parsed in about 1 s within a 256 MB heap, integration tests of pairing/upload/
+revocation, and an E2E run with a separate "phone" browser context. What still needs a real
+iPhone: Safari's file picker with a real export, and speed/memory on the device.
+
+### Optional: native iOS module
+
+Browsers cannot read HealthKit directly. A native path also exists:
 
 ```
 Apple Watch → Apple Health → HealthKit → FitCheckInSync (iPhone) → HTTPS + user JWT
@@ -221,6 +255,8 @@ switch language and theme. Full script: [`docs/TESTING.md`](docs/TESTING.md).
 
 ### Implemented, needs real-device / account verification
 
+- [x] Apple Health import from the iPhone browser (QR pairing, on-phone parsing, upload-only token)
+- [ ] Health import with a real iPhone export in Safari (file picker, device speed/memory)
 - [ ] iOS FitCheckInSync on a physical iPhone (HealthKit prompt, real samples, background delivery)
 - [ ] Hosted Supabase project + Vercel deployment (instructions above; requires your credentials)
 - [ ] Email confirmation flow with a real SMTP provider (disabled locally)

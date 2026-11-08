@@ -13,6 +13,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useAuth, useProfile } from '@/features/auth/AuthProvider'
 import { useLiveQuery } from '@/hooks/useLiveQuery'
 import { chooseLanguage, LANGUAGES, normalizeLanguage, type Language } from '@/i18n'
+import { ImportQrCard } from '@/features/health-import/ImportQrCard'
 import { api, type HealthCategory, type RelationshipWithPeer, type SharingPermission } from '@/lib/api'
 import { errorKey } from '@/lib/errors'
 import { useFormatters } from '@/lib/format'
@@ -341,7 +342,7 @@ export function SettingsPage() {
         </Card>
 
         {me.role === 'client' && (
-          <Card className="lg:sticky lg:top-28 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+          <Card className="lg:sticky lg:top-28 lg:col-start-2 lg:row-span-3 lg:row-start-1">
             <CardHeader title={t('settings.sharing')} subtitle={t('settings.sharingSubtitle')} icon={<ShieldCheck className="size-5" />} />
             {sharingQ.loading ? (
               <CardSkeleton />
@@ -413,6 +414,12 @@ export function SettingsPage() {
               </div>
             )}
           </Card>
+        )}
+
+        {me.role === 'client' && !me.is_demo && (
+          <div className="lg:col-start-1">
+            <ImportQrCard onPaired={() => void sharingQ.reload()} />
+          </div>
         )}
 
         <Card className="border-bad/25 lg:col-start-1">
