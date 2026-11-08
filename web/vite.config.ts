@@ -9,6 +9,8 @@ import { defineConfig } from 'vite'
 const shared = fileURLToPath(new URL('../supabase/functions/_shared', import.meta.url))
 
 export default defineConfig({
+  // GitHub Pages serves the app from a sub-path (e.g. /FitCheck-In/); locally it is '/'.
+  base: process.env.VITE_BASE ?? '/',
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

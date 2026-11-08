@@ -5,6 +5,7 @@ import { encode } from 'uqr'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { useToast } from '@/components/ui/Toast'
+import { appUrl } from '@/lib/env'
 import { errorKey } from '@/lib/errors'
 import { supabase } from '@/lib/supabase'
 
@@ -40,7 +41,7 @@ export function ImportQrCard({ onPaired }: { onPaired?: () => void }) {
 
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   const localOnly = /\/\/(localhost|127\.|\[::1\])/.test(origin)
-  const link = pairing ? `${origin}/import/${pairing.code}` : ''
+  const link = pairing ? appUrl(`/import/${pairing.code}`) : ''
   const expired = pairing ? Date.parse(pairing.expiresAt) <= now : false
 
   const create = async () => {

@@ -9,6 +9,14 @@ export const env = {
   demoMode: import.meta.env.VITE_DEMO_MODE === 'true',
 }
 
+/** Path the app is served from: '/' locally, '/FitCheck-In/' (etc.) on GitHub Pages. */
+export const basePath = import.meta.env.BASE_URL.replace(/\/$/, '')
+
+/** Absolute URL for an in-app path, e.g. appUrl('/invite/ABC') for links shared off-device. */
+export function appUrl(path: string) {
+  return `${typeof window !== 'undefined' ? window.location.origin : ''}${basePath}${path}`
+}
+
 export const isConfigured = Boolean(env.supabaseUrl && env.supabaseAnonKey)
 
 // Guard against the most dangerous misconfiguration: a secret key shipped to the browser.

@@ -1,0 +1,59 @@
+# Publishes both branches to one GitHub Pages site:
+#   main                            → https://<owner>.github.io/<repo>/
+#   demo/before-validation-feedback → https://<owner>.github.io/<repo>/before/
+# Both talk to the same hosted Supabase project. Only PUBLIC values are used here
+# (repository variables SUPABASE_URL and SUPABASE_ANON_KEY); never a service-role key.
+name: Pages
+on:
+  push:
+    branches: [main, demo/before-validation-feedback]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+      VITE_DEMO_MODE: 'true'
+    steps:
+      - name: Check configuration
+        run: |
+          test -n "$VITE_SUPABASE_URL" && test -n "$VITE_SUPABASE_ANON_KEY" || { echo "Set repository variables SUPABASE_URL and SUPABASE_ANON_KEY"; exit 1; }
+      - uses: actions/checkout@v4
+        with: { ref: main, path: main }
+      - uses: actions/checkout@v4
+        with: { ref: demo/before-validation-feedback, path: before }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: Build main
+        working-directory: main/web
+        run: npm ci && VITE_BASE="/${GITHUB_REPOSITORY#*/}/" npm run build
+      - name: Build demo (before)
+        working-directory: before/web
+        run: npm ci && VITE_BASE="/${GITHUB_REPOSITORY#*/}/before/" npm run build
+      - name: Assemble site
+        run: |
+          mkdir -p site/before
+          cp -r main/web/dist/. site/
+          cp -r before/web/dist/. site/before/
+          cp main/tools/pages/404.html site/404.html
+          touch site/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: site }
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: '${{ steps.deployment.outputs.page_url }}' }
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

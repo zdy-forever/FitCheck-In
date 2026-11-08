@@ -41,6 +41,7 @@ import { NoteEditor } from '@/features/sessions/NoteEditor'
 import { SessionEditor } from '@/features/sessions/SessionEditor'
 import { useLiveQuery } from '@/hooks/useLiveQuery'
 import { api, type Note, type SessionWithDetails } from '@/lib/api'
+import { appUrl } from '@/lib/env'
 import { errorKey } from '@/lib/errors'
 import { isSameLocalDay, useFormatters } from '@/lib/format'
 import { SessionCard } from '../client/ClientPages'
@@ -624,7 +625,7 @@ export function TrainerInvitationsPage() {
   const [busy, setBusy] = useState(false)
   const [created, setCreated] = useState<{ code: string } | null>(null)
 
-  const linkFor = (code: string) => `${window.location.origin}/invite/${code}`
+  const linkFor = (code: string) => appUrl(`/invite/${code}`)
   const copy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text)

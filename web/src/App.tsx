@@ -10,6 +10,7 @@ import { RequireRole } from '@/features/auth/guards'
 import { ChooseRolePage, RoleAuthPage } from '@/pages/auth/AuthPages'
 import { LandingPage } from '@/pages/landing/LandingPage'
 import { InviteLanding, NotFoundPage, PrivacyPage } from '@/pages/shared/PublicPages'
+import { basePath } from '@/lib/env'
 import { ThemeProvider } from '@/lib/theme'
 
 // Role areas are code-split so the landing page stays light.
@@ -85,7 +86,7 @@ const router = createBrowserRouter([
       { path: '*', element: <NotFoundPage /> },
     ],
   },
-])
+], { basename: basePath || '/' })
 
 export default function App() {
   return (
