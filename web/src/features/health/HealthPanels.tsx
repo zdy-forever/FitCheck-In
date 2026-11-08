@@ -1,5 +1,5 @@
 import { clsx } from 'clsx'
-import { Activity, AlertTriangle, BedDouble, CheckCircle2, CircleSlash, FlaskConical, HeartPulse, Info, Lock, Smartphone, Table2 } from 'lucide-react'
+import { Activity, AlertTriangle, BedDouble, CheckCircle2, CircleSlash, Dumbbell, FlaskConical, HeartPulse, Info, Lock, Smartphone, Table2 } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
@@ -327,6 +327,7 @@ export function HealthSummary({
         )}
         <p className="mt-4 rounded-xl bg-sunken p-3 text-xs leading-relaxed text-ink-3">{t('health.estimatesDisclaimer')}</p>
       </Card>
+      {shared.has('workouts') && a.training?.sessions && a.training.sessions.length > 0 && <TrainingLoadCard training={a.training} isDemo={isDemo} />}
     </div>
   )
 }
@@ -453,6 +454,57 @@ export function TrendChart({ title, data, unit, digits = 0, color, baseline, tes
           </ResponsiveContainer>
         </div>
       )}
+    </Card>
+  )
+}
+
+function TrainingLoadCard({ training, isDemo }: { training: NonNullable<Snapshot['assessment']['training']>; isDemo: boolean }) {
+  const { t, i18n } = useTranslation()
+  const f = useFormatters(i18n.language)
+  const rated = (src: string) => src === 'client_rpe' || src === 'trainer_rpe' || src === 'apple_effort'
+  const usual = training.acuteChronicRatio !== null && training.acuteChronicRatio > 0 ? training.load7Day / training.acuteChronicRatio : null
+  return (
+    <Card data-testid="training-load">
+      <CardHeader title={t('health.loadTitle')} icon={<Dumbbell className="size-5" />} action={<DemoBadge show={isDemo} />} />
+      <p className="-mt-2 mb-4 text-xs leading-relaxed text-ink-3">{t('health.loadExplain')}</p>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl bg-sunken p-4">
+          <div className="text-xs text-ink-3">{t('health.load7')}</div>
+          <div className="font-display text-2xl font-semibold tabular text-ink">{f.num(training.load7Day)}</div>
+        </div>
+        <div className="rounded-2xl bg-sunken p-4">
+          <div className="text-xs text-ink-3">{t('health.loadUsual')}</div>
+          <div className="font-display text-2xl font-semibold tabular text-ink">{usual === null ? '—' : f.num(usual)}</div>
+          {usual === null && <div className="mt-1 text-[11px] text-ink-3">{t('health.loadNoHistory')}</div>}
+        </div>
+        <div className="rounded-2xl bg-sunken p-4">
+          <div className="text-xs text-ink-3">{t('health.acwr')}</div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-display text-2xl font-semibold tabular text-ink">{training.acuteChronicRatio === null ? '—' : f.num(training.acuteChronicRatio, 2)}</span>
+            {training.loadStatus && <span className="text-xs font-medium text-ink-2">{t(`health.loadStatus.${training.loadStatus}`)}</span>}
+          </div>
+        </div>
+      </div>
+      <ul className="mt-4 divide-y divide-line" data-testid="load-sessions">
+        {training.sessions.slice(0, 8).map((s) => (
+          <li key={`${s.startMs}-${s.load}`} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
+            <span className="flex items-center gap-2">
+              <span className="font-medium text-ink">{t(`health.modalities.${s.modality}`)}</span>
+              <span className="text-ink-3">{f.weekdayShort(s.startMs)}</span>
+            </span>
+            <span className="flex items-center gap-2 text-ink-2">
+              <span className="tabular">
+                RPE {s.rpe} × {s.durationMinutes} {t('health.units.min')} = <b className="text-ink">{f.num(s.load)}</b>
+              </span>
+              <Badge tone={rated(s.rpeSource) ? 'accent' : 'neutral'}>{t(`health.rpeSources.${s.rpeSource}`)}</Badge>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-xs text-ink-3">
+        {t('health.ratedShare', { pct: Math.round(training.ratedShare * 100) })}
+        {training.ratedShare < 0.5 ? ` · ${t('health.estimatedHint')}` : ''}
+      </p>
     </Card>
   )
 }

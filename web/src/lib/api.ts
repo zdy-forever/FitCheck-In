@@ -41,6 +41,11 @@ export type SessionWithDetails = Session & {
   client?: { display_name: string } | null
 }
 
+/** Best-effort recompute of a client's readiness/load after data that feeds it changes. */
+function refreshSnapshot(clientId?: string) {
+  void supabase.functions.invoke('refresh-snapshot', { body: clientId ? { clientId } : {} }).catch(() => undefined)
+}
+
 export const api = {
   // ── relationships ──
   async myRelationships(role: Enums<'user_role'>): Promise<RelationshipWithPeer[]> {
@@ -89,7 +94,7 @@ export const api = {
   async submitCheckin(input: Omit<Checkin, 'created_at' | 'updated_at' | 'reviewed_at'>) {
     const row = unwrap(await supabase.from('pre_session_checkins').insert(input).select('*').single())
     // Fold the subjective answers into today's readiness. Best effort: the check-in is already saved.
-    void supabase.functions.invoke('refresh-snapshot', { body: {} }).catch(() => undefined)
+    refreshSnapshot()
     return row
   },
   async markReviewed(id: string) {
@@ -132,6 +137,7 @@ export const api = {
     if (exercises.length > 0) {
       unwrap(await supabase.from('session_exercises').insert(exercises.map((e, position) => ({ ...e, position, session_id: sessionId! }))))
     }
+    refreshSnapshot(client_id) // session duration/intensity feed the client's training load
     return sessionId
   },
   async deleteSession(id: string) {
@@ -145,15 +151,18 @@ export const api = {
    */
   async submitFeedback(input: Pick<Feedback, 'session_id' | 'client_id' | 'session_rpe' | 'enjoyment' | 'pain_level' | 'pain_areas' | 'comments'>, existingId?: string) {
     const answers = { session_rpe: input.session_rpe, enjoyment: input.enjoyment, pain_level: input.pain_level, pain_areas: input.pain_areas, comments: input.comments }
-    if (existingId) return unwrap(await supabase.from('post_session_feedback').update(answers).eq('id', existingId).select('*').single())
-    // trainer_id placeholder satisfies the generated type; the trigger overwrites it from the session.
-    return unwrap(
-      await supabase
-        .from('post_session_feedback')
-        .insert({ ...answers, session_id: input.session_id, client_id: input.client_id, trainer_id: input.client_id })
-        .select('*')
-        .single(),
-    )
+    const row = existingId
+      ? unwrap(await supabase.from('post_session_feedback').update(answers).eq('id', existingId).select('*').single())
+      : // trainer_id placeholder satisfies the generated type; the trigger overwrites it from the session.
+        unwrap(
+          await supabase
+            .from('post_session_feedback')
+            .insert({ ...answers, session_id: input.session_id, client_id: input.client_id, trainer_id: input.client_id })
+            .select('*')
+            .single(),
+        )
+    refreshSnapshot() // session RPE is the primary training-load input
+    return row
   },
 
   // ── notes ──

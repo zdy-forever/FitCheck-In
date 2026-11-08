@@ -33,6 +33,7 @@ import { ENGINE_SOURCE, buildDerivedMetrics, type EngineContext } from './engine
 import type { EngineInput, EngineOutput } from './types.ts'
 
 import { computeReadinessV2, READINESS_V2_VERSION, type Driver, type SignalDetail, type V2Input } from './readiness-v2.ts'
+import { TRAINING_LOAD_VERSION, type LoadSession, type TrainingLoadResult } from './training-load.ts'
 
 /** Primary scores: FitCheck-In v2 (personal-baseline model). health+ port kept under `legacy`. */
 export const ALGORITHM_VERSION = READINESS_V2_VERSION
@@ -90,6 +91,12 @@ export interface ReadinessAssessment {
     sleepDeltaHours: number | null
   }
   training: {
+    /** Session-RPE load model version. */
+    loadModel: string
+    /** Share of load whose RPE was actually rated (client / trainer / Apple Effort), 0–1. */
+    ratedShare: number
+    /** Sessions in the last 28 days (newest first) with RPE source, for transparency. */
+    sessions: Array<Pick<LoadSession, 'startMs' | 'durationMinutes' | 'modality' | 'rpe' | 'rpeSource' | 'load' | 'sources'>>
     load7Day: number
     load28Day: number
     acuteChronicRatio: number | null
@@ -126,7 +133,8 @@ export function v2LoadStatus(acr: number): EngineOutput['loadStatus'] {
 
 export interface V2Extras {
   history: V2Input['history']
-  load: V2Input['load']
+  /** From computeTrainingLoad (session-RPE). */
+  trainingLoad?: TrainingLoadResult | null
   checkin?: V2Input['checkin']
 }
 
@@ -149,7 +157,7 @@ export function assessReadiness(
   ctx: EngineContext,
   sampleTimes: SampleTimes = {},
   maxSampleAgeHours = DEFAULT_MAX_SAMPLE_AGE_HOURS,
-  v2Extras: V2Extras = { history: { hrv: [], rhr: [], sleepHours: [] }, load: null },
+  v2Extras: V2Extras = { history: { hrv: [], rhr: [], sleepHours: [] } },
 ): ReadinessAssessment {
   const maxAgeMs = maxSampleAgeHours * 3_600_000
   const isFresh = (t: number | undefined) => t === undefined || ctx.nowMs - t <= maxAgeMs
@@ -182,7 +190,7 @@ export function assessReadiness(
     restingHeartRate: raw.restingHeartRate !== undefined,
     restingHeartRateBaseline: b.averageRestingHeartRate7Day !== undefined,
     sleepBaseline: b.averageSleepHours7Day !== undefined,
-    workouts: input.workouts.length > 0,
+    workouts: input.workouts.length > 0 || (v2Extras.trainingLoad?.sessions.length ?? 0) > 0,
     activity: raw.stepsToday !== undefined || raw.activeEnergyKCal !== undefined,
     energy: raw.activeEnergyKCal !== undefined && raw.basalEnergyKCal !== undefined,
     nutrition: Object.values(raw.nutrients).some((v) => v !== undefined),
@@ -213,7 +221,10 @@ export function assessReadiness(
   const v2 = computeReadinessV2({
     today: { hrv: raw.heartRateVariabilitySDNN, rhr: raw.restingHeartRate, sleepHours: raw.sleep.totalHours },
     history: v2Extras.history,
-    load: v2Extras.load,
+    load:
+      v2Extras.trainingLoad && v2Extras.trainingLoad.chronicWeekly
+        ? { acute7: v2Extras.trainingLoad.acute7, chronicWeekly: v2Extras.trainingLoad.chronicWeekly }
+        : null,
     checkin: v2Extras.checkin ?? null,
   })
   const legacyVal = (x: number) => (compositeStatus === 'insufficient' ? null : round(x))
@@ -249,8 +260,11 @@ export function assessReadiness(
         has.sleep && has.sleepBaseline ? roundTo(raw.sleep.totalHours! - b.averageSleepHours7Day!, 2) : null,
     },
     training: {
-      load7Day: roundTo(out.totalLoad7Day, 1),
-      load28Day: roundTo(out.totalLoad28Day, 1),
+      loadModel: TRAINING_LOAD_VERSION,
+      ratedShare: v2Extras.trainingLoad?.ratedShare ?? 0,
+      sessions: (v2Extras.trainingLoad?.sessions ?? []).slice(0, 20).map(({ startMs, durationMinutes, modality, rpe, rpeSource, load, sources }) => ({ startMs, durationMinutes: Math.round(durationMinutes), modality, rpe, rpeSource, load: Math.round(load), sources })),
+      load7Day: v2Extras.trainingLoad ? v2Extras.trainingLoad.acute7 : 0,
+      load28Day: v2Extras.trainingLoad ? Math.round(v2Extras.trainingLoad.sessions.reduce((a, s) => a + s.load, 0)) : 0,
       // Same ratio and thresholds that drive the v2 readiness load adjustment.
       acuteChronicRatio: v2.acuteChronicRatio !== null ? roundTo(v2.acuteChronicRatio, 2) : null,
       loadStatus: v2.acuteChronicRatio === null ? null : v2LoadStatus(v2.acuteChronicRatio),

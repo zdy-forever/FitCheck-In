@@ -1,0 +1,102 @@
+From cbaf4799dcf7e2e6f1c50dc17dcd90e6f040d52e Mon Sep 17 00:00:00 2001
+From: u7782042 <u7782042@anu.edu.au>
+Date: Sun, 8 Nov 2026 15:58:33 +1100
+Subject: [PATCH 2/2] FitCheck-In Sync: upload Apple Workout Effort with
+ workouts (iOS 18+)
+
+Reads workoutEffortScore (user-rated) or estimatedWorkoutEffortScore for each
+workout's time range so the server can rate strength sessions by effort
+instead of heart rate, which under-reads lifting.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../FitCheckInHealthReader.swift              | 29 +++++++++++++++++--
+ .../FitCheckInSync/FitCheckInModels.swift     |  3 ++
+ .../Sources/FitCheckInSync/README.md          |  2 ++
+ 3 files changed, 32 insertions(+), 2 deletions(-)
+
+diff --git a/HealthMonitor/Sources/FitCheckInSync/FitCheckInHealthReader.swift b/HealthMonitor/Sources/FitCheckInSync/FitCheckInHealthReader.swift
+index 120c0ec..3f1c562 100644
+--- a/HealthMonitor/Sources/FitCheckInSync/FitCheckInHealthReader.swift
++++ b/HealthMonitor/Sources/FitCheckInSync/FitCheckInHealthReader.swift
+@@ -38,7 +38,11 @@ struct FitCheckInHealthReader {
+         if categories.contains(.vo2Max) { q(.vo2Max) }
+         if categories.contains(.activity) { q(.stepCount); q(.activeEnergyBurned); q(.basalEnergyBurned); q(.appleExerciseTime) }
+         if categories.contains(.sleep), let s = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) { types.insert(s) }
+-        if categories.contains(.workouts) { types.insert(HKObjectType.workoutType()); q(.heartRate) }
++        if categories.contains(.workouts) {
++            types.insert(HKObjectType.workoutType())
++            q(.heartRate)
++            if #available(iOS 18.0, macOS 15.0, *) { q(.workoutEffortScore); q(.estimatedWorkoutEffortScore) }
++        }
+         return types
+     }
+ 
+@@ -103,8 +107,9 @@ struct FitCheckInHealthReader {
+                 let hr = await heartRateStats(start: w.startDate, end: w.endDate)
+                 let kcal = w.statistics(for: HKQuantityType(.activeEnergyBurned))?.sumQuantity()?.doubleValue(for: .kilocalorie())
+                 let km = w.totalDistance?.doubleValue(for: .meterUnit(with: .kilo))
++                let effort = await workoutEffort(start: w.startDate, end: w.endDate)
+                 var item = upload(w, metric: .workout, value: w.duration / 60, category: Self.workoutKind(for: w.workoutActivityType).rawValue)
+-                item.metadata = .init(averageHeartRate: hr.average, maxHeartRate: hr.maximum, energyKCal: kcal, distanceKM: km)
++                item.metadata = .init(averageHeartRate: hr.average, maxHeartRate: hr.maximum, energyKCal: kcal, distanceKM: km, appleEffort: effort)
+                 samples.append(item)
+             }
+         }
+@@ -255,6 +260,26 @@ struct FitCheckInHealthReader {
+         }
+     }
+ 
++    /// Apple Workout Effort for a workout's time range (iOS 18+): the user's own rating if they
++    /// set one in the Fitness app, otherwise Apple's estimate. nil on older iOS or when absent.
++    private func workoutEffort(start: Date, end: Date) async -> Double? {
++        guard #available(iOS 18.0, macOS 15.0, *) else { return nil }
++        let predicate = HKQuery.predicateForSamples(withStart: start.addingTimeInterval(-60), end: end.addingTimeInterval(15 * 60))
++        for identifier in [HKQuantityTypeIdentifier.workoutEffortScore, .estimatedWorkoutEffortScore] {
++            guard let type = HKObjectType.quantityType(forIdentifier: identifier) else { continue }
++            let value: Double? = await withCheckedContinuation { cont in
++                let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
++                let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: 1, sortDescriptors: [sort]) { _, samples, _ in
++                    let v = (samples?.first as? HKQuantitySample)?.quantity.doubleValue(for: .appleEffortScore())
++                    cont.resume(returning: v)
++                }
++                store.execute(query)
++            }
++            if let value, (1...10).contains(value) { return value }
++        }
++        return nil
++    }
++
+     /// Same statistics query as `HealthKitService.fetchHeartRateStats`.
+     private func heartRateStats(start: Date, end: Date) async -> (average: Double?, maximum: Double?) {
+         guard let type = HKObjectType.quantityType(forIdentifier: .heartRate) else { return (nil, nil) }
+diff --git a/HealthMonitor/Sources/FitCheckInSync/FitCheckInModels.swift b/HealthMonitor/Sources/FitCheckInSync/FitCheckInModels.swift
+index d3680c9..53a1a2e 100644
+--- a/HealthMonitor/Sources/FitCheckInSync/FitCheckInModels.swift
++++ b/HealthMonitor/Sources/FitCheckInSync/FitCheckInModels.swift
+@@ -79,6 +79,9 @@ struct HealthSampleUpload: Codable, Equatable {
+         var maxHeartRate: Double?
+         var energyKCal: Double?
+         var distanceKM: Double?
++        /// Apple Workout Effort (1–10, iOS 18+). User-rated preferred over Apple's estimate.
++        /// Used by the server's session-RPE load model; heart rate under-reads strength work.
++        var appleEffort: Double?
+     }
+ }
+ 
+diff --git a/HealthMonitor/Sources/FitCheckInSync/README.md b/HealthMonitor/Sources/FitCheckInSync/README.md
+index d5bf8f3..9fa248f 100644
+--- a/HealthMonitor/Sources/FitCheckInSync/README.md
++++ b/HealthMonitor/Sources/FitCheckInSync/README.md
+@@ -24,6 +24,8 @@ entitlement + xcconfig in `project.yml`.
+ 
+ * `HealthPermissionState`, `WorkoutKind` (DomainModels.swift)
+ * HealthKit units, sleep-stage semantics and `HKWorkoutActivityType` mapping from `HealthKitService.swift`
++* Workouts carry Apple Workout Effort (iOS 18+, `workoutEffortScore` / `estimatedWorkoutEffortScore`)
++  so the server's session-RPE load model can rate strength sessions without relying on heart rate.
+ * Scoring: the server runs a test-verified TypeScript port of `DerivedMetricsEngine.swift` (see the FitCheck-In repo).
+ 
+ ## Configure
+-- 
+2.50.1 (Apple Git-155)
+

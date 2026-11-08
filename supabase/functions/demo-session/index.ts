@@ -14,7 +14,7 @@
  */
 
 import { createClient } from 'npm:@supabase/supabase-js@2.119.0'
-import { generateDemoSamples } from '../_shared/demo-data.ts'
+import { DEMO_COACH_DAY_OFFSETS, generateDemoSamples } from '../_shared/demo-data.ts'
 import { isValidTimeZone } from '../_shared/metrics/calendar.ts'
 import { recomputeSnapshot } from '../_shared/snapshot.ts'
 
@@ -129,15 +129,28 @@ Deno.serve(async (req) => {
       last_sync_status: 'success',
       last_sample_count: samples.length,
     })
-    await recomputeSnapshot(admin, clientId, timeZone, now, 'demo')
 
-    // Past sessions with check-ins, feedback and notes + one upcoming session.
     const day = 86_400_000
-    const sessionRows = [
-      { offset: -6, i: 0 },
-      { offset: -3, i: 1 },
-      { offset: -1, i: 2 },
-    ].map(({ offset, i }) => ({
+    // Four weeks of earlier coach sessions (RPE feedback on most) — the training-load baseline.
+    const history = DEMO_COACH_DAY_OFFSETS.slice(0, -3).map((offset, k) => ({
+      trainer_id: trainerId,
+      client_id: clientId,
+      scheduled_at: new Date(now + offset * day).toISOString(),
+      duration_minutes: 55 + (k % 3) * 5,
+      status: 'completed' as const,
+      session_type: k % 3 === 2 ? 'conditioning' : 'strength',
+      title: t.sessions[k % 3],
+      planned_intensity: 7,
+      actual_intensity: k % 4 === 0 ? 7 : null,
+    }))
+    const { data: older, error: hErr } = await admin.from('training_sessions').insert(history).select('id')
+    if (hErr || !older) throw new Error('sessions_failed')
+    await admin.from('post_session_feedback').insert(
+      older.filter((_, k) => k % 4 !== 3).map((s, k) => ({ session_id: s.id, client_id: clientId, trainer_id: clientId, session_rpe: [6, 7, 6, 7][k % 4], enjoyment: 4, pain_level: 0 })),
+    )
+
+    // The last three sessions get full detail: check-ins, feedback and notes. Plus one upcoming session.
+    const sessionRows = DEMO_COACH_DAY_OFFSETS.slice(-3).map((offset, i) => ({
       trainer_id: trainerId,
       client_id: clientId,
       scheduled_at: new Date(now + offset * day).toISOString(),
@@ -192,6 +205,9 @@ Deno.serve(async (req) => {
       title: t.sessions[0],
       planned_intensity: 7,
     })
+
+    // Compute last: sessions + feedback RPE feed the training-load model.
+    await recomputeSnapshot(admin, clientId, timeZone, now, 'demo')
 
     return json(200, {
       trainer: { email: trainerEmail, password },

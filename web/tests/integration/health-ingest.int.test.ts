@@ -287,3 +287,35 @@ describe.skipIf(!ANON)('readiness v2 end-to-end', () => {
     expect(r.status).toBe(401)
   })
 })
+
+describe.skipIf(!ANON)('session-RPE training load end-to-end', () => {
+  it('a coach-logged strength session with client RPE counts as load — no watch needed; trainer refresh is relationship-checked', async () => {
+    const c = await signUp('client')
+    const t = await signUp('trainer')
+    const stranger = await signUp('trainer')
+    const tc = createClient(URL, ANON, { global: { headers: { Authorization: `Bearer ${t.token}` } }, auth: { persistSession: false } })
+    const cc = createClient(URL, ANON, { global: { headers: { Authorization: `Bearer ${c.token}` } }, auth: { persistSession: false } })
+    const { data: inv } = await tc.from('trainer_invitations').insert({ trainer_id: t.userId }).select('code').single()
+    await cc.rpc('accept_invitation', { p_code: inv!.code, p_share: ['workouts', 'scores'] })
+
+    // Some HRV so a snapshot exists (no workouts uploaded from a watch).
+    const at = iso(2 * H)
+    await ingest(c.token, { schemaVersion: 1, device: { ...device, installationId: '6f1c1d8e-2b1e-4d0e-9a5a-0c0a5c1e9b10' }, timeZone: 'Australia/Sydney', enabledCategories: ['hrv'], samples: [{ sampleId: 'h', metricType: 'hrv_sdnn', value: 50, unit: 'ms', startAt: at, measuredAt: at }] })
+
+    const sid = crypto.randomUUID()
+    await tc.from('training_sessions').insert({ id: sid, trainer_id: t.userId, client_id: c.userId, scheduled_at: iso(5 * H), duration_minutes: 60, session_type: 'strength', status: 'completed' })
+    await cc.from('post_session_feedback').insert({ session_id: sid, client_id: c.userId, trainer_id: c.userId, session_rpe: 8, enjoyment: 4, pain_level: 0 })
+
+    const call = (token: string, body: unknown) => fetch(`${URL}/functions/v1/refresh-snapshot`, { method: 'POST', headers: { apikey: ANON, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    expect((await call(stranger.token, { clientId: c.userId })).status).toBe(403) // not this client's trainer
+    expect((await call(c.token, { clientId: t.userId })).status).toBe(403) // client cannot refresh someone else
+    const ok = await call(t.token, { clientId: c.userId })
+    expect(ok.status).toBe(200)
+    expect(Object.keys(await ok.json()).sort()).toEqual(['completeness', 'date']) // status only, no health data
+
+    const { data } = await tc.from('health_snapshots').select('assessment').eq('user_id', c.userId).single()
+    const training = (data as { assessment: { training: { load7Day: number; sessions: { rpe: number; rpeSource: string; load: number; modality: string }[] } } }).assessment.training
+    expect(training.load7Day).toBe(480)
+    expect(training.sessions[0]).toMatchObject({ rpe: 8, rpeSource: 'client_rpe', load: 480, modality: 'resistance' })
+  })
+})

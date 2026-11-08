@@ -3,6 +3,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.119.0'
 import { aggregateForEngine, type StoredSample } from './metrics/aggregate.ts'
 import { ALGORITHM_VERSION, assessReadiness } from './metrics/assessment.ts'
 import { localDateKey } from './metrics/calendar.ts'
+import { computeTrainingLoad, type PlatformSession } from './metrics/training-load.ts'
 
 export async function recomputeSnapshot(
   admin: SupabaseClient,
@@ -47,7 +48,29 @@ export async function recomputeSnapshot(
     ? { energy: todays.energy_level, sleepQuality: todays.sleep_quality, soreness: todays.muscle_soreness, pain: todays.pain_level }
     : null
 
-  const assessment = assessReadiness(agg.input, { nowMs, timeZone }, agg.sampleTimes, undefined, { history: agg.history, load: agg.load, checkin })
+  // Training sessions logged in FitCheck-In (all of this client's trainers) + their RPE feedback.
+  const { data: sessionRows } = await admin
+    .from('training_sessions')
+    .select('id, scheduled_at, duration_minutes, session_type, status, planned_intensity, actual_intensity, post_session_feedback(session_rpe)')
+    .eq('client_id', userId)
+    .gte('scheduled_at', new Date(nowMs - 28 * 86_400_000).toISOString())
+    .lte('scheduled_at', new Date(nowMs).toISOString())
+  const platform: PlatformSession[] = (sessionRows ?? []).map((r) => {
+    const fb = Array.isArray(r.post_session_feedback) ? r.post_session_feedback[0] : r.post_session_feedback
+    return {
+      id: r.id,
+      startMs: Date.parse(r.scheduled_at),
+      durationMinutes: r.duration_minutes,
+      sessionType: r.session_type,
+      status: r.status,
+      plannedIntensity: r.planned_intensity,
+      actualIntensity: r.actual_intensity,
+      clientRpe: (fb as { session_rpe?: number } | null)?.session_rpe ?? null,
+    }
+  })
+  const trainingLoad = computeTrainingLoad({ nowMs, platform, watch: agg.watchWorkouts, restingHeartRate: agg.input.baselines.averageRestingHeartRate7Day })
+
+  const assessment = assessReadiness(agg.input, { nowMs, timeZone }, agg.sampleTimes, undefined, { history: agg.history, trainingLoad, checkin })
 
   const { error: upErr } = await admin.from('health_snapshots').upsert(
     {

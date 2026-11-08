@@ -24,6 +24,8 @@ entitlement + xcconfig in `project.yml`.
 
 * `HealthPermissionState`, `WorkoutKind` (DomainModels.swift)
 * HealthKit units, sleep-stage semantics and `HKWorkoutActivityType` mapping from `HealthKitService.swift`
+* Workouts carry Apple Workout Effort (iOS 18+, `workoutEffortScore` / `estimatedWorkoutEffortScore`)
+  so the server's session-RPE load model can rate strength sessions without relying on heart rate.
 * Scoring: the server runs a test-verified TypeScript port of `DerivedMetricsEngine.swift` (see the FitCheck-In repo).
 
 ## Configure

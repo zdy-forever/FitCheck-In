@@ -81,8 +81,8 @@ Floors: HRV 7 % of mean, RHR 2 bpm, sleep 0.5 h. Signed so positive = better; cl
 * **Recovery** = `65 + 12 × Σ wᵢzᵢ / Σ wᵢ` (weights HRV 0.45, RHR 0.30, sleep 0.25, over
   available signals). 65 = "your normal day".
 * **Stress** (physiological strain) = `35 − 15 × z_autonomic`, HRV and RHR only, floor 10.
-* **Training load**: acute = last 7 days of workout load, chronic = previous 21 days ÷ 3.
-  No penalty up to a ratio of 1.3; then 25 points per +1.0, capped at 15.
+* **Training load**: session-RPE model (section 4b). Acute = last 7 days, chronic =
+  previous 21 days ÷ 3. No penalty up to a ratio of 1.3; then 25 points per +1.0, capped at 15.
 * **Check-in** (same local day): energy `(e−3)×3`, sleep quality `(q−3)×2`,
   soreness `−max(0,s−3)×1.2`, pain `−max(0,p−1)×1.5`.
 * **Readiness** = Recovery − load penalty + check-in adjustment, clamped 0–100. With no
@@ -110,8 +110,46 @@ Tests: `web/tests/metrics/readiness-v2.test.ts` (13 cases) and the live integrat
 * Needs ≥ 4 days of history per signal; new users see "Not enough data" for the first days.
 * Weights and point scales are reasoned defaults, not clinically validated. They are
   constants at the top of `readiness-v2.ts` so they can be tuned with real coaching data.
-* Workout load still uses the health+ `estimateWorkoutLoad` (heart-rate based); strength
-  sessions without heart rate are under-counted.
+
+## 4b. Training load (`fitcheck-load@1.0.0`, session-RPE)
+
+**Problem.** health+'s `estimateWorkoutLoad` is heart-rate based. Heart rate stays moderate
+during lifting even when muscular strain is high, so strength work was under-counted
+regardless of whether a watch was worn. Measured with the original formula:
+
+| 60-minute session | health+ load | session-RPE load |
+|---|---|---|
+| Hard lifting, Watch avg 125 / peak 160 bpm, rated RPE 8 | 42.7 | **480** |
+| Lifting, no heart rate, not rated | 33.3 | 360 (marked *Estimated*) |
+| Easy walk, avg 105 / peak 115 bpm | 41.7 | 240 |
+| Threshold run, avg 165 / peak 180 bpm | 90.7 | 540 |
+| Coach-logged strength session, no watch, client RPE 8 | **not counted** | 480 |
+
+**Model.** load = RPE (CR-10, 1–10) × minutes, for every session (Foster et al., 2001 —
+the standard method for resistance and mixed training). Implementation:
+`supabase/functions/_shared/metrics/training-load.ts`.
+
+RPE source, best first (each session stores which one was used and the UI shows it):
+
+1. client's post-session feedback RPE
+2. trainer's recorded actual intensity
+3. Apple Workout Effort (iOS 18+; user-rated preferred over Apple's estimate) — uploaded by the iOS bridge
+4. heart-rate reserve vs the person's HRmax — **cardio only**
+5. trainer's planned intensity
+6. typical RPE for the training type (strength 6, cardio 5, mixed 6, mobility 3) — marked *Estimated*
+
+* HRmax = max(208 − 0.7 × age, highest HR seen in the last 28 days), never the session's own
+  peak (that would rate an easy walk as near-maximal).
+* A FitCheck-In session and an Apple Watch workout whose times overlap (±30 min) are merged
+  and counted once.
+* Acute:chronic ratio requires ≥ 2 sessions in the chronic window; otherwise "not enough history".
+* The UI shows each session's RPE × minutes and its source, plus the share of load that comes
+  from real ratings, prompting the trainer to collect feedback when estimates dominate.
+* Readiness is recomputed when a check-in, feedback or a session is saved (`refresh-snapshot`;
+  trainers can refresh only clients with an active relationship, and receive status only).
+
+Tests: `web/tests/metrics/training-load.test.ts` (11 cases) and the live integration test
+"session-RPE training load end-to-end".
 
 ## 5. The sufficiency layer
 

@@ -18,7 +18,9 @@ test('demo mode: creates a sandbox and shows clearly-labelled simulated health d
   await expect(page.getByText('Algorithm estimates')).toBeVisible()
   await expect(page.getByTestId('trend-hrv')).toBeVisible()
   // Demo badges on health panels — simulated data is never presented as real.
-  // The measured panel and the estimates panel each carry a demo label (plus the global header/banner notice).
-  await expect(page.locator('main').getByTitle(/Simulated demo data/).locator('visible=true')).toHaveCount(2)
+  // Every simulated panel (measured, estimates, training load) carries a demo label.
+  await expect(page.locator('main').getByTitle(/Simulated demo data/).locator('visible=true')).toHaveCount(3)
+  await expect(page.getByTestId('training-load')).toBeVisible()
+  await expect(page.getByTestId('load-sessions')).toContainText('Client RPE')
   await expect(page.getByText(/not medical assessments/)).toBeVisible()
 })

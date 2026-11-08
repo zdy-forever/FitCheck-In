@@ -79,6 +79,9 @@ struct HealthSampleUpload: Codable, Equatable {
         var maxHeartRate: Double?
         var energyKCal: Double?
         var distanceKM: Double?
+        /// Apple Workout Effort (1–10, iOS 18+). User-rated preferred over Apple's estimate.
+        /// Used by the server's session-RPE load model; heart rate under-reads strength work.
+        var appleEffort: Double?
     }
 }
 

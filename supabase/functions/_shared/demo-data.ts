@@ -18,6 +18,13 @@ export interface DemoSample {
   source_name: string
 }
 
+/**
+ * Days (offsets from today, negative = past) with a coach-led session in the demo:
+ * three sessions a week for four weeks. The watch never records a separate workout on these
+ * days, so nothing is double-counted; on other days the client does some solo cardio.
+ */
+export const DEMO_COACH_DAY_OFFSETS = [-26, -24, -22, -19, -17, -15, -12, -10, -8, -6, -3, -1] as const
+
 function rng(seed: number) {
   let s = seed >>> 0
   return () => {
@@ -100,18 +107,18 @@ export function generateDemoSamples(nowMs: number, timeZone: string, seed = 42):
       push(`basal:${key}`, 'basal_energy', 1650 * dayFraction, at(0), endOfDay)
       push(`exercise:${key}`, 'exercise_time', (18 + r() * 40) * dayFraction, at(0), endOfDay)
     }
-    // Workouts on ~3-4 days per week.
-    if ([1, 3, 5].includes(new Date(day).getUTCDay()) || r() < 0.12) {
+    // Solo cardio on ~2 non-coach days per week (coach sessions are created by demo-session).
+    const coachDay = (DEMO_COACH_DAY_OFFSETS as readonly number[]).includes(-i)
+    if (!coachDay && (i % 7 === 2 || i % 7 === 5) && r() < 0.85) {
       const start = at(18, 0)
-      const duration = 45 + Math.round(r() * 30)
+      const duration = 35 + Math.round(r() * 20)
       const end = start + duration * 60_000
       if (end <= nowMs) {
-        const kind = r() < 0.6 ? 'strength' : 'running'
-        const avg = kind === 'strength' ? 118 + r() * 15 : 145 + r() * 15
-        push(`workout:${key}`, 'workout', duration, start, end, kind, {
+        const avg = 140 + r() * 15
+        push(`workout:${key}`, 'workout', duration, start, end, 'running', {
           averageHeartRate: Math.round(avg),
-          maxHeartRate: Math.round(avg * 1.18),
-          energyKCal: Math.round(duration * (kind === 'strength' ? 6.5 : 10)),
+          maxHeartRate: Math.round(avg * 1.15),
+          energyKCal: Math.round(duration * 10),
         })
       }
     }

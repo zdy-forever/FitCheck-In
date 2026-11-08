@@ -17,6 +17,7 @@ import { addDays, fromLocal, localDateKey, localParts, startOfDay, wholeDaysBetw
 import { estimateWorkoutLoad, estimateZoneDistribution } from './engine.ts'
 import type { SampleTimes } from './assessment.ts'
 import type { MetricType } from './health-schema.ts'
+import type { WatchWorkout } from './training-load.ts'
 import type { DailyTrendPoint, EngineInput, SleepSummary, WorkoutKind, WorkoutSummary } from './types.ts'
 
 export interface StoredSample {
@@ -28,7 +29,7 @@ export interface StoredSample {
   /** epoch ms */
   measuredAt: number
   category?: string | null
-  metadata?: { averageHeartRate?: number; maxHeartRate?: number; energyKCal?: number; distanceKM?: number } | null
+  metadata?: { averageHeartRate?: number; maxHeartRate?: number; energyKCal?: number; distanceKM?: number; appleEffort?: number } | null
 }
 
 export interface AggregateResult {
@@ -36,8 +37,8 @@ export interface AggregateResult {
   sampleTimes: SampleTimes
   /** Per-day personal history for v2 (previous days only — today excluded). */
   history: { hrv: { day: string; value: number }[]; rhr: { day: string; value: number }[]; sleepHours: { day: string; value: number }[] }
-  /** Acute (7-day) and chronic (prior 21 days, weekly-equivalent) training load; null without workouts. */
-  load: { acute7: number; chronicWeekly: number } | null
+  /** Apple Watch workouts (last 28 days) for the session-RPE load model (training-load.ts). */
+  watchWorkouts: WatchWorkout[]
   /** Latest values for display with their timestamps. */
   latest: Partial<Record<'hrv' | 'restingHeartRate' | 'vo2Max', { value: number; measuredAt: number }>>
 }
@@ -250,14 +251,22 @@ export function aggregateForEngine(
     if (r !== undefined) history.rhr.push({ day: key, value: r })
     if (sl !== undefined) history.sleepHours.push({ day: key, value: sl })
   }
-  const acute7 = workouts.filter((w) => w.date > addDays(nowMs, -7, timeZone)).reduce((a, w) => a + w.estimatedLoad, 0)
-  const prior21 = workouts.filter((w) => w.date <= addDays(nowMs, -7, timeZone)).reduce((a, w) => a + w.estimatedLoad, 0)
-  const load = workouts.length > 0 && prior21 > 0 ? { acute7, chronicWeekly: prior21 / 3 } : null
+  const watchWorkouts: WatchWorkout[] = samples
+    .filter((s) => s.metricType === 'workout' && s.measuredAt >= start28 && s.measuredAt <= nowMs)
+    .map((s) => ({
+      id: s.sampleId,
+      startMs: s.startAt,
+      endMs: s.measuredAt,
+      kind: s.category ?? 'mixed',
+      averageHeartRate: s.metadata?.averageHeartRate,
+      maxHeartRate: s.metadata?.maxHeartRate,
+      appleEffort: s.metadata?.appleEffort,
+    }))
 
   return {
     input,
     history,
-    load,
+    watchWorkouts,
     sampleTimes: { sleepEndMs: lastNight.lastEnd, hrvMs: hrv?.measuredAt, restingHeartRateMs: rhr?.measuredAt },
     latest: {
       ...(hrv ? { hrv: { value: hrv.value, measuredAt: hrv.measuredAt } } : {}),

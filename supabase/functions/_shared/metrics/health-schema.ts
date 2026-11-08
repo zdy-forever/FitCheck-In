@@ -84,7 +84,7 @@ export interface HealthSampleUpload {
   /** Sleep stage (sleep_analysis) or workout kind (workout). */
   category?: string
   /** Small, whitelisted metadata (workout avg/max HR, kcal, distance). */
-  metadata?: { averageHeartRate?: number; maxHeartRate?: number; energyKCal?: number; distanceKM?: number }
+  metadata?: { averageHeartRate?: number; maxHeartRate?: number; energyKCal?: number; distanceKM?: number; appleEffort?: number }
   sourceName?: string
   sourceBundle?: string
 }
@@ -156,10 +156,11 @@ export function validateSample(
     if (typeof o.metadata !== 'object') return fail('invalid_metadata')
     const m = o.metadata as Record<string, unknown>
     metadata = {}
-    for (const key of ['averageHeartRate', 'maxHeartRate', 'energyKCal', 'distanceKM'] as const) {
+    for (const key of ['averageHeartRate', 'maxHeartRate', 'energyKCal', 'distanceKM', 'appleEffort'] as const) {
       const v = m[key]
       if (v === undefined || v === null) continue
       if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 100_000) return fail('invalid_metadata')
+      if (key === 'appleEffort' && (v < 1 || v > 10)) return fail('invalid_metadata')
       metadata[key] = v
     }
   }

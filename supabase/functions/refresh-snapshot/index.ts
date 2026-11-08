@@ -1,8 +1,10 @@
 /**
- * POST /functions/v1/refresh-snapshot
- * Recomputes the caller's own daily health snapshot (e.g. right after a check-in, so the
- * subjective answers feed into readiness). Authenticated; a user can only refresh themselves.
- * No-op (204) if the user has never synced health data.
+ * POST /functions/v1/refresh-snapshot   body: { "clientId"?: uuid }
+ * Recomputes a client's daily health snapshot so new check-ins, session feedback (RPE) or
+ * trainer-logged sessions feed into readiness / training load.
+ *  - A client may refresh only themselves (clientId omitted or equal to self).
+ *  - A trainer may refresh a client only while the relationship is active.
+ * Returns status only (never health data). No-op (204) if the client has no health data.
  */
 import { createClient } from 'npm:@supabase/supabase-js@2.119.0'
 import { isValidTimeZone } from '../_shared/metrics/calendar.ts'
@@ -25,16 +27,40 @@ Deno.serve(async (req) => {
   const { data: u, error } = await admin.auth.getUser(token)
   if (error || !u?.user) return json(401, { error: 'invalid_token' })
 
-  const { data: profile } = await admin.from('profiles').select('role, is_demo, time_zone').eq('id', u.user.id).single()
-  if (!profile || profile.role !== 'client') return json(403, { error: 'only_clients' })
+  let body: { clientId?: unknown } = {}
+  try {
+    body = await req.json()
+  } catch {
+    /* empty body */
+  }
+  const { data: caller } = await admin.from('profiles').select('role').eq('id', u.user.id).single()
+  if (!caller) return json(403, { error: 'profile_not_found' })
 
-  const { count } = await admin.from('health_samples').select('id', { count: 'exact', head: true }).eq('user_id', u.user.id)
+  let clientId = u.user.id
+  if (caller.role === 'trainer') {
+    if (typeof body.clientId !== 'string') return json(400, { error: 'client_id_required' })
+    const { data: rel } = await admin
+      .from('trainer_client_relationships')
+      .select('id')
+      .eq('trainer_id', u.user.id)
+      .eq('client_id', body.clientId)
+      .eq('status', 'active')
+      .maybeSingle()
+    if (!rel) return json(403, { error: 'no_active_relationship' })
+    clientId = body.clientId
+  } else if (body.clientId !== undefined && body.clientId !== u.user.id) {
+    return json(403, { error: 'forbidden' })
+  }
+
+  const { data: profile } = await admin.from('profiles').select('is_demo, time_zone').eq('id', clientId).single()
+  if (!profile) return json(404, { error: 'not_found' })
+  const { count } = await admin.from('health_samples').select('id', { count: 'exact', head: true }).eq('user_id', clientId)
   if (!count) return new Response(null, { status: 204, headers: cors })
 
   const tz = isValidTimeZone(profile.time_zone) ? profile.time_zone : 'UTC'
   try {
-    const snap = await recomputeSnapshot(admin, u.user.id, tz, Date.now(), profile.is_demo ? 'demo' : 'healthkit')
-    return json(200, snap)
+    const snap = await recomputeSnapshot(admin, clientId, tz, Date.now(), profile.is_demo ? 'demo' : 'healthkit')
+    return json(200, { date: snap.date, completeness: snap.completeness })
   } catch {
     return json(500, { error: 'snapshot_failed' })
   }

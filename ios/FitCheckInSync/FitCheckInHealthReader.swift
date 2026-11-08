@@ -38,7 +38,11 @@ struct FitCheckInHealthReader {
         if categories.contains(.vo2Max) { q(.vo2Max) }
         if categories.contains(.activity) { q(.stepCount); q(.activeEnergyBurned); q(.basalEnergyBurned); q(.appleExerciseTime) }
         if categories.contains(.sleep), let s = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) { types.insert(s) }
-        if categories.contains(.workouts) { types.insert(HKObjectType.workoutType()); q(.heartRate) }
+        if categories.contains(.workouts) {
+            types.insert(HKObjectType.workoutType())
+            q(.heartRate)
+            if #available(iOS 18.0, macOS 15.0, *) { q(.workoutEffortScore); q(.estimatedWorkoutEffortScore) }
+        }
         return types
     }
 
@@ -103,8 +107,9 @@ struct FitCheckInHealthReader {
                 let hr = await heartRateStats(start: w.startDate, end: w.endDate)
                 let kcal = w.statistics(for: HKQuantityType(.activeEnergyBurned))?.sumQuantity()?.doubleValue(for: .kilocalorie())
                 let km = w.totalDistance?.doubleValue(for: .meterUnit(with: .kilo))
+                let effort = await workoutEffort(start: w.startDate, end: w.endDate)
                 var item = upload(w, metric: .workout, value: w.duration / 60, category: Self.workoutKind(for: w.workoutActivityType).rawValue)
-                item.metadata = .init(averageHeartRate: hr.average, maxHeartRate: hr.maximum, energyKCal: kcal, distanceKM: km)
+                item.metadata = .init(averageHeartRate: hr.average, maxHeartRate: hr.maximum, energyKCal: kcal, distanceKM: km, appleEffort: effort)
                 samples.append(item)
             }
         }
@@ -253,6 +258,26 @@ struct FitCheckInHealthReader {
             }
             store.execute(query)
         }
+    }
+
+    /// Apple Workout Effort for a workout's time range (iOS 18+): the user's own rating if they
+    /// set one in the Fitness app, otherwise Apple's estimate. nil on older iOS or when absent.
+    private func workoutEffort(start: Date, end: Date) async -> Double? {
+        guard #available(iOS 18.0, macOS 15.0, *) else { return nil }
+        let predicate = HKQuery.predicateForSamples(withStart: start.addingTimeInterval(-60), end: end.addingTimeInterval(15 * 60))
+        for identifier in [HKQuantityTypeIdentifier.workoutEffortScore, .estimatedWorkoutEffortScore] {
+            guard let type = HKObjectType.quantityType(forIdentifier: identifier) else { continue }
+            let value: Double? = await withCheckedContinuation { cont in
+                let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+                let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: 1, sortDescriptors: [sort]) { _, samples, _ in
+                    let v = (samples?.first as? HKQuantitySample)?.quantity.doubleValue(for: .appleEffortScore())
+                    cont.resume(returning: v)
+                }
+                store.execute(query)
+            }
+            if let value, (1...10).contains(value) { return value }
+        }
+        return nil
     }
 
     /// Same statistics query as `HealthKitService.fetchHeartRateStats`.
