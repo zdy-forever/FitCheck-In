@@ -40,7 +40,9 @@ export function generateDemoSamples(nowMs: number, timeZone: string, seed = 42):
   const r = rng(seed)
   const out: DemoSample[] = []
   const iso = (ms: number) => new Date(ms).toISOString()
-  const push = (id: string, metric: MetricType, value: number, start: number, end: number, category: string | null = null, metadata: Record<string, number> = {}) =>
+  const push = (id: string, metric: MetricType, value: number, start: number, end: number, category: string | null = null, metadata: Record<string, number> = {}) => {
+    // Nothing can have been measured in the future (and measured_at >= start_at is enforced).
+    if (start > nowMs) return
     out.push({
       sample_id: `demo:${id}`,
       metric_type: metric,
@@ -52,6 +54,7 @@ export function generateDemoSamples(nowMs: number, timeZone: string, seed = 42):
       metadata,
       source_name: 'FitCheck-In Demo Data (simulated)',
     })
+  }
 
   const today = startOfDay(nowMs, timeZone)
   for (let i = 29; i >= 0; i--) {
