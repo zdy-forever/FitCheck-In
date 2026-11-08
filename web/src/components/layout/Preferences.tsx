@@ -22,7 +22,7 @@ function useClickOutside(open: boolean, close: () => void) {
   return ref
 }
 
-const iconBtn = 'grid size-10 place-items-center rounded-full text-ink-2 transition hover:bg-sunken hover:text-ink active:scale-95'
+const iconBtn = 'group grid size-10 place-items-center rounded-full text-ink-2 transition hover:bg-sunken hover:text-ink active:scale-90'
 
 export function LanguageSwitcher() {
   const { t, i18n } = useTranslation()
@@ -49,7 +49,7 @@ export function LanguageSwitcher() {
       {open && (
         <div role="menu" className="glass-strong absolute right-0 top-12 z-50 w-44 rounded-2xl p-1.5">
           {LANGUAGES.map((l) => (
-            <button key={l.code} role="menuitemradio" aria-checked={current === l.code} type="button" onClick={() => void choose(l.code)} className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm text-ink hover:bg-sunken" lang={l.code}>
+            <button key={l.code} role="menuitemradio" aria-checked={current === l.code} type="button" onClick={() => void choose(l.code)} className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm text-ink transition-colors hover:bg-sunken" lang={l.code}>
               {l.label}
               {current === l.code && <Check className="size-4 text-accent" aria-hidden />}
             </button>
@@ -74,7 +74,7 @@ export function ThemeSwitcher() {
   return (
     <div className="relative" ref={ref}>
       <button type="button" className={iconBtn} aria-haspopup="menu" aria-expanded={open} aria-label={t('nav.theme')} onClick={() => setOpen((v) => !v)} data-testid="theme-switch">
-        <CurrentIcon className="size-[18px]" aria-hidden />
+        <CurrentIcon className="size-[18px] transition-transform duration-500 group-hover:rotate-45" aria-hidden />
       </button>
       {open && (
         <div role="menu" className="glass-strong absolute right-0 top-12 z-50 w-44 rounded-2xl p-1.5">

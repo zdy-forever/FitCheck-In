@@ -61,12 +61,12 @@ export function ChooseRolePage() {
     <AuthLayout>
       <div className="w-full max-w-2xl">
         <NotConfigured />
-        <h1 className="mb-8 text-center font-display text-3xl font-semibold tracking-tight text-ink sm:text-4xl">{t('auth.chooseRole')}</h1>
+        <h1 className="mb-8 text-center font-display text-4xl font-semibold tracking-tight text-ink">{t('auth.chooseRole')}</h1>
         <div className="grid gap-4 sm:grid-cols-2">
           {roles.map(({ role, Icon, desc }, i) => (
             <motion.div key={role} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}>
-              <Link to={`/auth/${role}${qs}`} className="glass group flex h-full flex-col gap-4 rounded-[28px] p-7 transition-all duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-lg)] active:scale-[0.99]" data-testid={`portal-${role}`}>
-                <div className="grid size-14 place-items-center rounded-2xl bg-accent-soft text-accent transition-transform group-hover:scale-105">
+              <Link to={`/auth/${role}${qs}`} className="glass group lift flex h-full flex-col gap-4 rounded-[28px] p-7" data-testid={`portal-${role}`}>
+                <div className="pop-icon grid size-14 place-items-center rounded-2xl bg-accent-soft text-accent">
                   <Icon className="size-7" aria-hidden />
                 </div>
                 <div>

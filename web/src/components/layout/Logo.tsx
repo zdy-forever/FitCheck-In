@@ -20,7 +20,7 @@ export function Wordmark() {
   return (
     <span className="flex items-center gap-2">
       <Logo className="size-8" />
-      <span className="font-display text-[17px] font-semibold tracking-tight text-ink">
+      <span className="font-display text-lg font-semibold tracking-tight text-ink">
         FitCheck<span className="text-accent">-In</span>
       </span>
     </span>

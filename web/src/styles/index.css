@@ -27,6 +27,9 @@
   --accent: #0a84a6;
   --accent-strong: #076b87;
   --accent-soft: rgb(10 132 166 / 0.12);
+  --accent-ring: rgb(10 132 166 / 0.35);
+  --accent-wash: rgb(10 132 166 / 0.06);
+  --spot: rgb(10 132 166 / 0.10);
   --accent-contrast: #ffffff;
   --glow-1: rgb(56 189 248 / 0.35);
   --glow-2: rgb(167 139 250 / 0.28);
@@ -88,6 +91,9 @@
   --accent: #3cc3e6;
   --accent-strong: #6bd3ee;
   --accent-soft: rgb(60 195 230 / 0.14);
+  --accent-ring: rgb(60 195 230 / 0.4);
+  --accent-wash: rgb(60 195 230 / 0.07);
+  --spot: rgb(60 195 230 / 0.12);
   --accent-contrast: #04222c;
   --glow-1: rgb(14 165 233 / 0.28);
   --glow-2: rgb(139 92 246 / 0.24);
@@ -136,49 +142,99 @@
   --font-sans: var(--font-sans);
   --font-display: var(--font-display);
   --radius-card: var(--radius-lg);
+
+  /* ── Fluid type scale ──────────────────────────────────────────────────
+     Every text-* utility scales smoothly with the viewport between ~360px and ~1600px
+     wide instead of jumping at breakpoints. rem + vw (never vw alone) so browser zoom and
+     the user's default font size still work. Body sizes move a little, headings a lot. */
+  --text-2xs: clamp(0.625rem, 0.6rem + 0.1vw, 0.6875rem); /* 10 → 11 */
+  --text-2xs--line-height: 1.4;
+  --text-xs: clamp(0.6875rem, 0.65rem + 0.16vw, 0.8125rem); /* 11 → 13 */
+  --text-xs--line-height: 1.45;
+  --text-sm: clamp(0.8125rem, 0.78rem + 0.16vw, 0.9375rem); /* 13 → 15 */
+  --text-sm--line-height: 1.5;
+  --text-md: clamp(0.875rem, 0.84rem + 0.18vw, 1rem); /* 14 → 16 */
+  --text-md--line-height: 1.5;
+  --text-base: clamp(0.9375rem, 0.9rem + 0.2vw, 1.0625rem); /* 15 → 17 */
+  --text-base--line-height: 1.55;
+  --text-lg: clamp(1rem, 0.94rem + 0.3vw, 1.1875rem); /* 16 → 19 */
+  --text-lg--line-height: 1.5;
+  --text-xl: clamp(1.0625rem, 0.98rem + 0.4vw, 1.3125rem); /* 17 → 21 */
+  --text-xl--line-height: 1.4;
+  --text-2xl: clamp(1.25rem, 1.1rem + 0.7vw, 1.625rem); /* 20 → 26 */
+  --text-2xl--line-height: 1.3;
+  --text-3xl: clamp(1.5rem, 1.25rem + 1.1vw, 2.125rem); /* 24 → 34 */
+  --text-3xl--line-height: 1.2;
+  --text-4xl: clamp(1.75rem, 1.4rem + 1.6vw, 2.625rem); /* 28 → 42 */
+  --text-4xl--line-height: 1.15;
+  --text-5xl: clamp(2.125rem, 1.6rem + 2.4vw, 3.5rem); /* 34 → 56 */
+  --text-5xl--line-height: 1.08;
+  --text-6xl: clamp(2.5rem, 1.75rem + 3.4vw, 4.5rem); /* 40 → 72 */
+  --text-6xl--line-height: 1.05;
+  /* Hero: each designed line (≤ 9 CJK characters) must fit one line at 320–430px phone widths. */
+  --text-7xl: clamp(2rem, 0.6rem + 7vw, 5.75rem); /* 32 → 92 (hero) */
+  --text-7xl--line-height: 1.02;
 }
 
-/* ─────────────────────────────── base ─────────────────────────────── */
-html {
-  -webkit-text-size-adjust: 100%;
-  text-rendering: optimizeLegibility;
-  scroll-behavior: smooth;
-}
-body {
-  margin: 0;
-  min-height: 100dvh;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-sans);
-  font-feature-settings: 'cv11', 'ss01';
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;
-}
-:lang(zh-CN) body {
-  letter-spacing: 0.01em;
-  line-height: 1.65;
-}
-::selection {
-  background: var(--accent-soft);
-}
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 8px;
-}
-input,
-textarea,
-select,
-button {
-  font: inherit;
-  color: inherit;
-}
-input[type='range'] {
-  accent-color: var(--accent);
-}
-.tabular {
-  font-variant-numeric: tabular-nums;
+/* ─────────────────────────────── base ───────────────────────────────
+   Inside @layer base so Tailwind utilities (in @layer utilities) can override these.
+   Unlayered rules beat every layer — e.g. an unlayered `button { color: inherit }` silently
+   defeated every text-* colour utility on buttons. */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    /* Unclassed text (paragraphs, table cells…) also scales: 15px on phones → 17px on wide screens. */
+    font-size: var(--text-base);
+    line-height: 1.55;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+  /* Even line lengths for headings (no one-character orphans, important for Chinese which can
+     break anywhere); avoid short last lines in paragraphs. */
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  :lang(zh-CN) body {
+    letter-spacing: 0.01em;
+    line-height: 1.65;
+  }
+  ::selection {
+    background: var(--accent-soft);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+  input[type='range'] {
+    accent-color: var(--accent);
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
 }
 
 /* Ambient background used behind app and landing. */
@@ -259,6 +315,129 @@ input[type='range'] {
   }
 }
 
+/* ─────────────────────────── interaction motion ───────────────────────────
+   Hover effects only where a real pointer exists (no sticky hover on touch);
+   every effect is transform/opacity/shadow only (GPU-friendly) and is disabled by
+   prefers-reduced-motion further below. */
+
+/* Interactive surface: cards, list items and tiles that respond to the pointer. */
+@utility lift {
+  transition:
+    transform 0.32s var(--ease-out),
+    box-shadow 0.32s var(--ease-out),
+    border-color 0.32s var(--ease-out),
+    background-color 0.32s var(--ease-out);
+  will-change: transform;
+  &:active {
+    transform: translateY(0) scale(0.985);
+    transition-duration: 0.12s;
+  }
+  @media (hover: hover) {
+    &:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-lg);
+      border-color: var(--accent-ring);
+    }
+  }
+}
+
+/* Subtler variant for dense rows (tables, list rows). */
+@utility row-hover {
+  transition: background-color 0.2s ease, transform 0.25s var(--ease-out);
+  @media (hover: hover) {
+    &:hover {
+      background-color: var(--accent-wash);
+    }
+  }
+}
+
+/* Child that reacts when its .group parent is hovered: chevrons slide, icons pop. */
+@utility nudge-x {
+  transition: transform 0.3s var(--ease-out);
+  @media (hover: hover) {
+    :where(.group):hover & {
+      transform: translateX(4px);
+    }
+  }
+}
+@utility pop-icon {
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  @media (hover: hover) {
+    :where(.group):hover & {
+      transform: translateY(-2px) scale(1.12) rotate(-4deg);
+    }
+  }
+}
+
+/* Light sweep across a button on hover (glass sheen). */
+@utility sheen {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 0.35) 50%, transparent 70%);
+    transform: translateX(-120%);
+    transition: transform 0.7s var(--ease-out);
+    pointer-events: none;
+  }
+  @media (hover: hover) {
+    &:hover::after {
+      transform: translateX(120%);
+    }
+  }
+}
+
+/* Staggered entrance for lists/grids: children fade-rise in sequence. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@utility stagger {
+  /* fill-mode "backwards" (not "both"): hold the start frame during the delay, then release
+     transform after the animation so the children's own hover transforms (.lift) still work. */
+  & > * {
+    animation: rise-in 0.5s var(--ease-out) backwards;
+  }
+  & > *:nth-child(1) { animation-delay: 0ms; }
+  & > *:nth-child(2) { animation-delay: 45ms; }
+  & > *:nth-child(3) { animation-delay: 90ms; }
+  & > *:nth-child(4) { animation-delay: 135ms; }
+  & > *:nth-child(5) { animation-delay: 180ms; }
+  & > *:nth-child(6) { animation-delay: 225ms; }
+  & > *:nth-child(7) { animation-delay: 270ms; }
+  & > *:nth-child(n + 8) { animation-delay: 300ms; }
+}
+
+/* Spotlight that follows the pointer inside a card (position set by useSpotlight). */
+@utility spotlight {
+  position: relative;
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), var(--spot), transparent 60%);
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    pointer-events: none;
+  }
+  @media (hover: hover) {
+    &:hover::before {
+      opacity: 1;
+    }
+  }
+}
+
 /* Slow drifting aurora for the hero. Pure CSS transforms (GPU-friendly). */
 @keyframes drift-a {
   0%,
@@ -315,6 +494,23 @@ input[type='range'] {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Tailwind's translate-/scale-/rotate- utilities use the individual transform properties. */
+  *,
+  *::before,
+  *::after {
+    translate: none !important;
+    scale: none !important;
+    rotate: none !important;
+  }
+  .lift:hover,
+  .lift:active,
+  .group:hover .nudge-x,
+  .group:hover .pop-icon {
+    transform: none !important;
+  }
+  .sheen::after {
+    display: none;
+  }
   *,
   *::before,
   *::after {
@@ -328,7 +524,7 @@ input[type='range'] {
 /* Recharts: keep text in ink tokens. */
 .recharts-text {
   fill: var(--chart-axis);
-  font-size: 11px;
+  font-size: var(--text-2xs);
 }
 .recharts-cartesian-grid line {
   stroke: var(--chart-grid);

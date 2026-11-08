@@ -47,7 +47,7 @@ export function CheckinCard({ checkin, canReview, compact, highlight }: { checki
   ]
 
   return (
-    <article className={clsx('rounded-2xl border bg-surface-strong p-4 transition-shadow', highlight ? 'border-accent shadow-[0_0_0_4px_var(--accent-soft)]' : 'border-line')} data-testid="checkin-card">
+    <article className={clsx('lift rounded-2xl border bg-surface-strong p-4', highlight ? 'border-accent shadow-[0_0_0_4px_var(--accent-soft)]' : 'border-line')} data-testid="checkin-card">
       <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm">
           <span className="font-semibold text-ink">{f.dateTime(checkin.created_at)}</span>
@@ -70,16 +70,16 @@ export function CheckinCard({ checkin, canReview, compact, highlight }: { checki
           )}
         </div>
       </header>
-      <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-ink-3">{t('checkin.subjective')}</p>
+      <p className="mb-1 text-2xs font-medium uppercase tracking-wider text-ink-3">{t('checkin.subjective')}</p>
       <div className={clsx('grid gap-2', compact ? 'grid-cols-5' : 'grid-cols-2 sm:grid-cols-5')}>
         {metrics.map(({ Icon, label, value, sub, warn }) => (
           <div key={label} className={clsx('rounded-xl p-2.5', warn ? 'bg-warn-soft' : 'bg-sunken')}>
-            <div className="flex items-center gap-1.5 text-[11px] text-ink-3">
+            <div className="flex items-center gap-1.5 text-2xs text-ink-3">
               <Icon className="size-3.5 shrink-0" aria-hidden />
               <span className="truncate">{label}</span>
             </div>
             <div className={clsx('mt-0.5 font-semibold tabular', warn ? 'text-warn' : 'text-ink')}>{value}</div>
-            {!compact && sub && <div className="truncate text-[11px] text-ink-3">{sub}</div>}
+            {!compact && sub && <div className="truncate text-2xs text-ink-3">{sub}</div>}
           </div>
         ))}
       </div>

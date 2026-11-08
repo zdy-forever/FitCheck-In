@@ -49,7 +49,7 @@ export function DashboardPreview({ compact = false }: { compact?: boolean }) {
           <span className="size-2.5 rounded-full bg-[#febc2e]" />
           <span className="size-2.5 rounded-full bg-[#28c840]" />
         </div>
-        <span className="rounded-full bg-sunken px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-ink-3">{t('landing.previewLabel')}</span>
+        <span className="rounded-full bg-sunken px-2.5 py-0.5 text-2xs font-medium uppercase tracking-wider text-ink-3">{t('landing.previewLabel')}</span>
       </div>
       <div className={clsx('grid gap-3', compact ? 'grid-cols-1' : 'md:grid-cols-[1.1fr_1fr]')}>
         <div className="flex flex-col gap-2">
@@ -60,7 +60,7 @@ export function DashboardPreview({ compact = false }: { compact?: boolean }) {
               { k: t('trainer.stats.pending'), v: '2' },
             ].map((s) => (
               <div key={s.k} className="rounded-2xl bg-surface-strong p-3 shadow-sm">
-                <div className="truncate text-[11px] text-ink-3">{s.k}</div>
+                <div className="truncate text-2xs text-ink-3">{s.k}</div>
                 <div className="font-display text-2xl font-semibold tabular text-ink">{s.v}</div>
               </div>
             ))}
@@ -92,12 +92,12 @@ export function DashboardPreview({ compact = false }: { compact?: boolean }) {
           <motion.div key={selected} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3 }} className="flex flex-col gap-2 rounded-2xl bg-surface-strong p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-ink">{c.name}</span>
-              <span className={clsx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium', c.state === 'good' ? 'bg-good-soft text-good' : 'bg-warn-soft text-warn')}>
+              <span className={clsx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium', c.state === 'good' ? 'bg-good-soft text-good' : 'bg-warn-soft text-warn')}>
                 {c.state === 'good' ? <CheckCircle2 className="size-3" /> : <Clock className="size-3" />}
                 {c.state === 'good' ? t('health.status.ok') : t('trainer.attention')}
               </span>
             </div>
-            <div className="text-[11px] font-medium uppercase tracking-wider text-ink-3">{t('checkin.subjective')}</div>
+            <div className="text-2xs font-medium uppercase tracking-wider text-ink-3">{t('checkin.subjective')}</div>
             <div className="grid grid-cols-3 gap-2 text-center">
               {[
                 { l: t('checkin.sleepQuality'), v: `${c.sleep}/5`, I: BedDouble },
@@ -107,11 +107,11 @@ export function DashboardPreview({ compact = false }: { compact?: boolean }) {
                 <div key={l} className="rounded-xl bg-sunken p-2">
                   <I className="mx-auto mb-1 size-4 text-ink-3" aria-hidden />
                   <div className="text-sm font-semibold tabular text-ink">{v}</div>
-                  <div className="truncate text-[10px] text-ink-3">{l}</div>
+                  <div className="truncate text-2xs text-ink-3">{l}</div>
                 </div>
               ))}
             </div>
-            <div className="mt-1 text-[11px] font-medium uppercase tracking-wider text-ink-3">{t('health.measured')}</div>
+            <div className="mt-1 text-2xs font-medium uppercase tracking-wider text-ink-3">{t('health.measured')}</div>
             <div className="flex items-center gap-3 rounded-xl bg-sunken p-3">
               <HeartPulse className="size-5 text-[var(--series-1)]" aria-hidden />
               <div className="flex-1">

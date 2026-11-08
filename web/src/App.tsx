@@ -1,3 +1,4 @@
+import { MotionConfig } from 'motion/react'
 import { lazy, Suspense } from 'react'
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router'
 import { AppShell } from '@/components/layout/AppShell'
@@ -83,12 +84,16 @@ const router = createBrowserRouter([
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <ToastProvider>
-        <AuthProvider>
-          <RouterProvider router={router} />
-        </AuthProvider>
-      </ToastProvider>
-    </ThemeProvider>
+    // reducedMotion="user": every Motion animation (hover, page transitions, parallax)
+    // follows the OS "reduce motion" setting.
+    <MotionConfig reducedMotion="user">
+      <ThemeProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <RouterProvider router={router} />
+          </AuthProvider>
+        </ToastProvider>
+      </ThemeProvider>
+    </MotionConfig>
   )
 }

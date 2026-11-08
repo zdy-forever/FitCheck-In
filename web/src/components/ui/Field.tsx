@@ -3,7 +3,7 @@ import { AlertCircle } from 'lucide-react'
 import { forwardRef, useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 
 const control =
-  'w-full rounded-xl border bg-surface-strong px-3.5 text-[15px] text-ink placeholder:text-ink-3 transition-colors outline-none focus:border-accent focus:ring-4 focus:ring-accent-soft disabled:opacity-60'
+  'w-full rounded-xl border bg-surface-strong px-3.5 text-md text-ink placeholder:text-ink-3 transition-colors outline-none focus:border-accent focus:ring-4 focus:ring-accent-soft disabled:opacity-60'
 
 interface FieldShellProps {
   label: ReactNode

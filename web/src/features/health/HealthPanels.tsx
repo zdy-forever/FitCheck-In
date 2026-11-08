@@ -1,5 +1,6 @@
 import { clsx } from 'clsx'
 import { Activity, AlertTriangle, BedDouble, CheckCircle2, CircleSlash, Dumbbell, FlaskConical, HeartPulse, Info, Lock, Smartphone, Table2 } from 'lucide-react'
+import { motion } from 'motion/react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
@@ -44,7 +45,7 @@ function Explain({ text }: { text: string }) {
       <button type="button" className="grid size-5 place-items-center rounded-full text-ink-3 hover:text-ink focus-visible:text-ink" aria-label={text}>
         <Info className="size-3.5" aria-hidden />
       </button>
-      <span role="tooltip" className="glass-strong pointer-events-none absolute bottom-7 left-1/2 z-30 w-64 -translate-x-1/2 rounded-xl p-3 text-xs font-normal leading-relaxed text-ink-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+      <span role="tooltip" className="glass-strong pointer-events-none absolute bottom-7 left-1/2 z-30 w-[min(16rem,calc(100vw-2rem))] -translate-x-1/2 translate-y-1 rounded-xl p-3 text-xs font-normal leading-relaxed text-ink-2 opacity-0 transition-all duration-200 group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100 max-sm:left-auto max-sm:right-[-0.5rem] max-sm:translate-x-0">
         {text}
       </span>
     </span>
@@ -81,9 +82,9 @@ function MeasuredTile({
   const f = useFormatters(i18n.language)
   const stale = measuredAt ? Date.now() - new Date(measuredAt).getTime() > STALE_MS : false
   return (
-    <div className="flex flex-col gap-2 rounded-2xl border border-line bg-surface-strong p-4">
+    <div className="group lift flex flex-col gap-2 rounded-2xl border border-line bg-surface-strong p-4">
       <div className="flex items-center gap-2 text-sm text-ink-2">
-        <span style={{ color }}>{icon}</span>
+        <span className="pop-icon" style={{ color }}>{icon}</span>
         <span className="font-medium">{label}</span>
         <Explain text={explain} />
       </div>
@@ -127,7 +128,7 @@ function ScoreTile({ label, explain, score, inverted }: { label: string; explain
   const s = score ?? { value: null, status: 'insufficient' as const }
   const pct = s.value ?? 0
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface-strong p-4" data-testid={`score-${label}`}>
+    <div className="lift flex flex-col gap-3 rounded-2xl border border-line bg-surface-strong p-4" data-testid={`score-${label}`}>
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-1 text-sm font-medium text-ink-2">
           {label}
@@ -144,7 +145,7 @@ function ScoreTile({ label, explain, score, inverted }: { label: string; explain
             <span className="ml-1 text-base font-normal text-ink-3">/100</span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-sunken" aria-hidden>
-            <div className={clsx('h-full rounded-full transition-[width] duration-1000', inverted ? 'bg-[var(--series-2)]' : 'bg-accent')} style={{ width: `${pct}%` }} />
+            <motion.div className={clsx('h-full rounded-full', inverted ? 'bg-[var(--series-2)]' : 'bg-accent')} initial={{ width: 0 }} whileInView={{ width: `${pct}%` }} viewport={{ once: true }} transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }} />
           </div>
         </>
       )}
@@ -196,7 +197,7 @@ export function HealthSummary({
           icon={<HeartPulse className="size-5" />}
           action={<DemoBadge show={isDemo} />}
         />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="stagger grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <MeasuredTile
             icon={<HeartPulse className="size-4" />}
             label={t('health.hrv')}
@@ -256,7 +257,7 @@ export function HealthSummary({
         <CardHeader title={t('health.estimates')} icon={<Info className="size-5" />} action={<DemoBadge show={isDemo} />} />
         {shared.has('scores') ? (
           <>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="stagger grid gap-3 sm:grid-cols-3">
               <ScoreTile label={t('health.readiness')} explain={t('health.readinessExplain')} score={a.scores.readiness} />
               <ScoreTile label={t('health.recovery')} explain={t('health.recoveryExplain')} score={a.scores.recovery} />
               <ScoreTile label={t('health.stress')} explain={t('health.stressExplain')} score={a.scores.stress} inverted />
@@ -292,18 +293,21 @@ export function HealthSummary({
                     {a.signals?.[0] ? ` · ${t('health.personalBaseline', { days: Math.max(...a.signals.map((s) => s.baselineDays)) })}` : ''}
                   </span>
                 </div>
-                <ul className="flex flex-col gap-1.5">
+                <ul className="stagger flex flex-col gap-1.5">
                   {a.drivers.map((d) => {
                     const width = d.impact === 0 ? 0 : Math.max(Math.min(Math.abs(d.impact) * 3, 50), 4)
                     return (
-                      <li key={d.key} className="grid grid-cols-[minmax(0,1fr)_120px_36px] items-center gap-3 text-sm sm:grid-cols-[minmax(0,1fr)_200px_40px]">
+                      <li key={d.key} className="row-hover -mx-2 grid grid-cols-[minmax(0,1fr)_120px_36px] items-center gap-3 rounded-lg px-2 py-0.5 text-sm sm:grid-cols-[minmax(0,1fr)_200px_40px]">
                         <span className="truncate text-ink-2">{t(`health.driverKeys.${d.key}`)}</span>
                         <span className="relative h-2 rounded-full bg-sunken" aria-hidden>
                           <span className="absolute inset-y-0 left-1/2 w-px bg-line-strong" />
                           {d.impact !== 0 && (
-                            <span
+                            <motion.span
                               className={clsx('absolute inset-y-0 rounded-full', d.impact > 0 ? 'left-1/2 bg-accent' : 'right-1/2 bg-[var(--series-2)]')}
-                              style={{ width: `${width}%` }}
+                              initial={{ width: 0 }}
+                              whileInView={{ width: `${width}%` }}
+                              viewport={{ once: true }}
+                              transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
                             />
                           )}
                         </span>
@@ -434,7 +438,7 @@ export function TrendChart({ title, data, unit, digits = 0, color, baseline, tes
               <XAxis dataKey="day" tickFormatter={fmtDay} tickLine={false} axisLine={false} minTickGap={28} />
               <YAxis domain={domain} tickLine={false} axisLine={false} width={44} tickFormatter={(v: number) => f.num(v, digits)} />
               {baseline !== null && baseline !== undefined && (
-                <ReferenceLine y={baseline} stroke="var(--chart-axis)" strokeDasharray="4 4" label={{ value: t('health.usual'), position: 'insideTopRight', fontSize: 10, fill: 'var(--chart-axis)' }} />
+                <ReferenceLine y={baseline} stroke="var(--chart-axis)" strokeDasharray="4 4" label={{ value: t('health.usual'), position: 'insideTopRight', fontSize: 'var(--text-2xs)', fill: 'var(--chart-axis)' }} />
               )}
               <Tooltip
                 cursor={{ stroke: 'var(--line-strong)' }}
@@ -475,7 +479,7 @@ function TrainingLoadCard({ training, isDemo }: { training: NonNullable<Snapshot
         <div className="rounded-2xl bg-sunken p-4">
           <div className="text-xs text-ink-3">{t('health.loadUsual')}</div>
           <div className="font-display text-2xl font-semibold tabular text-ink">{usual === null ? '—' : f.num(usual)}</div>
-          {usual === null && <div className="mt-1 text-[11px] text-ink-3">{t('health.loadNoHistory')}</div>}
+          {usual === null && <div className="mt-1 text-2xs text-ink-3">{t('health.loadNoHistory')}</div>}
         </div>
         <div className="rounded-2xl bg-sunken p-4">
           <div className="text-xs text-ink-3">{t('health.acwr')}</div>
@@ -485,9 +489,9 @@ function TrainingLoadCard({ training, isDemo }: { training: NonNullable<Snapshot
           </div>
         </div>
       </div>
-      <ul className="mt-4 divide-y divide-line" data-testid="load-sessions">
+      <ul className="stagger mt-4 divide-y divide-line" data-testid="load-sessions">
         {training.sessions.slice(0, 8).map((s) => (
-          <li key={`${s.startMs}-${s.load}`} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
+          <li key={`${s.startMs}-${s.load}`} className="row-hover -mx-2 flex flex-wrap items-center justify-between gap-2 rounded-xl px-2 py-2.5 text-sm">
             <span className="flex items-center gap-2">
               <span className="font-medium text-ink">{t(`health.modalities.${s.modality}`)}</span>
               <span className="text-ink-3">{f.weekdayShort(s.startMs)}</span>

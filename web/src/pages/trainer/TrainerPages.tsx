@@ -19,7 +19,7 @@ import {
   UserPlus,
   Users,
 } from 'lucide-react'
-import { motion } from 'motion/react'
+import { motion, useReducedMotion } from 'motion/react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
@@ -77,6 +77,7 @@ function LivePulse({ at }: { at: number | null }) {
 }
 
 export function TrainerDashboard() {
+  const reduceMotion = useReducedMotion()
   const { t, i18n } = useTranslation()
   const f = useFormatters(i18n.language)
   const me = useProfile()
@@ -121,10 +122,20 @@ export function TrainerDashboard() {
       <PageHeader title={t('trainer.overviewTitle', { name: me.display_name })} subtitle={t('trainer.overviewSubtitle')} action={<LivePulse at={q.liveAt} />} />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map(({ label, value, Icon, accent }, i) => (
-          <motion.div key={label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className={clsx('card p-4 sm:p-5', accent && 'ring-2 ring-accent/40')} data-testid={`stat-${i}`}>
+          <motion.div
+            key={label}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            // Motion owns this element's transform (entrance), so hover/tap lift is done here too.
+            whileHover={reduceMotion ? undefined : { y: -4, boxShadow: 'var(--shadow-lg)' }}
+            whileTap={reduceMotion ? undefined : { scale: 0.98 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 26, delay: i * 0.05 }}
+            className={clsx('group card p-4 transition-colors hover:border-accent-ring sm:p-5', accent && 'ring-2 ring-accent/40')}
+            data-testid={`stat-${i}`}
+          >
             <div className="flex items-center justify-between text-sm text-ink-3">
               <span className="truncate">{label}</span>
-              <Icon className={clsx('size-4 shrink-0', accent ? 'text-accent' : '')} aria-hidden />
+              <Icon className={clsx('pop-icon size-4 shrink-0', accent ? 'text-accent' : '')} aria-hidden />
             </div>
             <div className="mt-2 font-display text-4xl font-semibold tracking-tight text-ink">
               <AnimatedNumber value={value} />
@@ -139,12 +150,12 @@ export function TrainerDashboard() {
           {recentCheckins.length === 0 ? (
             <p className="text-sm text-ink-3">{t('checkin.noneYet')}</p>
           ) : (
-            <ul className="flex flex-col gap-3" data-testid="recent-checkins">
+            <ul className="stagger flex flex-col gap-3" data-testid="recent-checkins">
               {recentCheckins.slice(0, 6).map((c) => (
                 <li key={c.id}>
-                  <Link to={`/trainer/clients/${c.client_id}?tab=checkins`} className="mb-1 inline-flex items-center gap-1 text-sm font-semibold text-ink hover:text-accent">
+                  <Link to={`/trainer/clients/${c.client_id}?tab=checkins`} className="group mb-1 inline-flex items-center gap-1 text-sm font-semibold text-ink transition-colors hover:text-accent">
                     {nameOf(c.client_id)}
-                    <ChevronRight className="size-4" aria-hidden />
+                    <ChevronRight className="nudge-x size-4" aria-hidden />
                   </Link>
                   <CheckinCard checkin={c} canReview compact highlight={q.liveAt !== null && Date.now() - new Date(c.created_at).getTime() < 60_000} />
                 </li>
@@ -161,7 +172,7 @@ export function TrainerDashboard() {
               <ul className="flex flex-col gap-2">
                 {attention.map(({ c, reasons }) => (
                   <li key={c.client_id}>
-                    <Link to={`/trainer/clients/${c.client_id}`} className="block rounded-2xl border border-line bg-surface-strong p-3 hover:border-line-strong">
+                    <Link to={`/trainer/clients/${c.client_id}`} className="lift block rounded-2xl border border-line bg-surface-strong p-3">
                       <div className="font-medium text-ink">{c.display_name}</div>
                       <div className="mt-1 flex flex-wrap gap-1">
                         {reasons.map((r) => (
@@ -183,7 +194,7 @@ export function TrainerDashboard() {
             ) : (
               <ul className="divide-y divide-line">
                 {sessions.slice(0, 6).map((s) => (
-                  <li key={s.id} className="flex items-center justify-between gap-2 py-2.5 text-sm">
+                  <li key={s.id} className="row-hover -mx-2 flex items-center justify-between gap-2 rounded-xl px-2 py-2.5 text-sm">
                     <Link to={`/trainer/clients/${s.client_id}?tab=sessions`} className="min-w-0">
                       <div className="truncate font-medium text-ink">{s.client?.display_name}</div>
                       <div className="truncate text-xs text-ink-3">{s.title ?? t(`sessions.types.${s.session_type}`)}</div>
@@ -238,7 +249,7 @@ export function TrainerClientsPage() {
         <label className="relative block w-full lg:max-w-sm">
           <span className="sr-only">{t('common.search')}</span>
           <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-3" aria-hidden />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('trainer.searchPlaceholder')} className="h-11 w-full rounded-2xl border border-line bg-surface-strong pl-10 pr-4 text-[15px] outline-none focus:border-accent focus:ring-4 focus:ring-accent-soft" data-testid="client-search" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('trainer.searchPlaceholder')} className="h-11 w-full rounded-2xl border border-line bg-surface-strong pl-10 pr-4 text-md outline-none focus:border-accent focus:ring-4 focus:ring-accent-soft" data-testid="client-search" />
         </label>
         <div className="flex flex-wrap gap-2">
           <Segmented label="filter" value={filter} onChange={setFilter} options={[{ value: 'all', label: t('trainer.filterAll') }, { value: 'pending', label: t('trainer.filterPending') }, { value: 'attention', label: t('trainer.filterAttention') }]} size="sm" />
@@ -276,7 +287,7 @@ export function TrainerClientsPage() {
                   <th className="px-5 py-3" />
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="stagger">
                 {rows.map((c) => (
                   <ClientRow key={c.client_id} c={c} />
                 ))}
@@ -284,10 +295,10 @@ export function TrainerClientsPage() {
             </table>
           </div>
           {/* Mobile cards */}
-          <ul className="flex flex-col gap-2 md:hidden">
+          <ul className="stagger flex flex-col gap-2 md:hidden">
             {rows.map((c) => (
               <li key={c.client_id}>
-                <Link to={`/trainer/clients/${c.client_id}`} className="card flex items-center gap-3 p-4">
+                <Link to={`/trainer/clients/${c.client_id}`} className="group card lift flex items-center gap-3 p-4">
                   <div className="grid size-11 shrink-0 place-items-center rounded-full bg-accent-soft font-semibold text-accent">{c.display_name[0]}</div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 font-semibold text-ink">
@@ -299,7 +310,7 @@ export function TrainerClientsPage() {
                     </div>
                     <StateChips c={c} />
                   </div>
-                  <ChevronRight className="size-5 text-ink-3" aria-hidden />
+                  <ChevronRight className="nudge-x size-5 text-ink-3" aria-hidden />
                 </Link>
               </li>
             ))}
@@ -314,7 +325,7 @@ function StateChips({ c }: { c: OverviewRow }) {
   const { t } = useTranslation()
   if (!c.latest_checkin_at) return null
   return (
-    <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
+    <div className="mt-1 flex flex-wrap gap-1 text-2xs">
       <span className="rounded-md bg-sunken px-1.5 py-0.5 text-ink-2">
         {t('checkin.energy')} {c.latest_checkin_energy}/5
       </span>
@@ -333,11 +344,11 @@ function ClientRow({ c }: { c: OverviewRow }) {
   const f = useFormatters(i18n.language)
   const navigate = useNavigate()
   return (
-    <tr className="cursor-pointer border-b border-line transition-colors last:border-0 hover:bg-sunken/50" onClick={() => navigate(`/trainer/clients/${c.client_id}`)}>
+    <tr className="group row-hover cursor-pointer border-b border-line last:border-0" onClick={() => navigate(`/trainer/clients/${c.client_id}`)}>
       <td className="px-5 py-3.5">
         <div className="flex items-center gap-3">
-          <div className="grid size-9 place-items-center rounded-full bg-accent-soft font-semibold text-accent">{c.display_name[0]}</div>
-          <span className="font-medium text-ink">{c.display_name}</span>
+          <div className="pop-icon grid size-9 place-items-center rounded-full bg-accent-soft font-semibold text-accent">{c.display_name[0]}</div>
+          <span className="font-medium text-ink transition-colors group-hover:text-accent">{c.display_name}</span>
         </div>
       </td>
       <td className="px-3 py-3.5 text-ink-2">{c.last_session_at ? f.date(c.last_session_at) : '—'}</td>
@@ -490,12 +501,7 @@ export function TrainerClientDetail() {
             <EmptyState icon={<CalendarDays className="size-6" />} title={t('sessions.none')} />
           ) : (
             sessions.map((s) => (
-              <div key={s.id} className="relative">
-                <SessionCard session={s} />
-                <button type="button" onClick={() => setEditing(s)} className="absolute right-3 top-3 grid size-9 place-items-center rounded-xl bg-surface-strong text-ink-3 shadow-sm hover:text-ink" aria-label={t('sessions.edit')} data-testid="edit-session">
-                  <Pencil className="size-4" />
-                </button>
-              </div>
+              <SessionCard key={s.id} session={s} onEdit={() => setEditing(s)} />
             ))
           )}
         </div>
@@ -506,12 +512,12 @@ export function TrainerClientDetail() {
             <CardHeader title={editingNote ? t('common.edit') : t('notes.new')} icon={<Pencil className="size-5" />} />
             <NoteEditor key={editingNote?.id ?? 'new'} trainerId={me.id} clientId={clientId} sessions={sessions} note={editingNote} onSaved={() => { setEditingNote(null); void q.reload() }} onCancel={editingNote ? () => setEditingNote(null) : undefined} />
           </Card>
-          <div className="flex flex-col gap-3" data-testid="notes-list">
+          <div className="stagger flex flex-col gap-3" data-testid="notes-list">
             {notes.length === 0 ? (
               <EmptyState title={t('notes.none')} />
             ) : (
               notes.map((n) => (
-                <article key={n.id} className="card p-4">
+                <article key={n.id} className="card lift p-4">
                   <header className="mb-2 flex flex-wrap items-center justify-between gap-2">
                     <span className="text-sm text-ink-3">{f.dateTime(n.created_at)}</span>
                     <div className="flex items-center gap-1">
@@ -594,14 +600,9 @@ export function TrainerSessionsPage() {
       ) : list.length === 0 ? (
         <EmptyState icon={<CalendarDays className="size-6" />} title={t('sessions.none')} />
       ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="stagger grid gap-3 lg:grid-cols-2">
           {list.map((s) => (
-            <div key={s.id} className="relative">
-              <SessionCard session={s} trainerName={s.client?.display_name ?? undefined} />
-              <button type="button" onClick={() => setEditing(s)} className="absolute right-3 top-3 grid size-9 place-items-center rounded-xl bg-surface-strong text-ink-3 shadow-sm hover:text-ink" aria-label={t('sessions.edit')}>
-                <Pencil className="size-4" />
-              </button>
-            </div>
+            <SessionCard key={s.id} session={s} trainerName={s.client?.display_name ?? undefined} onEdit={() => setEditing(s)} />
           ))}
         </div>
       )}
@@ -674,11 +675,11 @@ export function TrainerInvitationsPage() {
       ) : q.data.length === 0 ? (
         <EmptyState icon={<Mail className="size-6" />} title={t('invitations.none')} body={t('trainer.noClientsBody')} />
       ) : (
-        <ul className="grid gap-3 md:grid-cols-2" data-testid="invite-list">
+        <ul className="stagger grid gap-3 md:grid-cols-2" data-testid="invite-list">
           {q.data.map((i) => {
             const st = statusOf(i)
             return (
-              <li key={i.id} className="card flex flex-col gap-3 p-4">
+              <li key={i.id} className="card lift flex flex-col gap-3 p-4">
                 <div className="flex items-center justify-between gap-2">
                   <code className="font-mono text-xl font-semibold tracking-[0.2em] text-ink" data-testid="invite-code-value">
                     {i.code}

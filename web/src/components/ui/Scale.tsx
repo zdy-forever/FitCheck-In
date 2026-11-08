@@ -50,11 +50,11 @@ export function Scale({
             <label
               key={v}
               className={clsx(
-                'relative grid h-11 cursor-pointer place-items-center rounded-xl border text-[15px] font-medium tabular transition-all duration-150 select-none',
+                'relative grid h-11 cursor-pointer place-items-center rounded-xl border text-md font-medium tabular transition-all duration-200 ease-out select-none',
                 'has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-accent-soft',
                 checked
-                  ? clsx('border-transparent shadow-md', tone === 'severity' ? severityColor(v) : 'bg-accent text-accent-contrast')
-                  : 'border-line bg-surface-strong text-ink-2 hover:border-line-strong active:scale-95',
+                  ? clsx('scale-[1.04] border-transparent shadow-md', tone === 'severity' ? severityColor(v) : 'bg-accent text-accent-contrast')
+                  : 'border-line bg-surface-strong text-ink-2 hover:-translate-y-0.5 hover:border-accent-ring hover:text-ink hover:shadow-md active:scale-95',
               )}
               title={labels?.[v - min]}
               data-testid={`${name}-${v}`}

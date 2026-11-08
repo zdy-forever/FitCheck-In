@@ -27,6 +27,7 @@ import { buttonClass } from '@/components/ui/Button'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { homeFor } from '@/features/auth/guards'
 import { env } from '@/lib/env'
+import { useSpotlight } from '@/hooks/useSpotlight'
 import { DashboardPreview } from './DashboardPreview'
 
 const reveal: Variants = {
@@ -42,11 +43,21 @@ function Reveal({ children, delay = 0, className }: { children: ReactNode; delay
   )
 }
 
+/** Card with a pointer-following spotlight. */
+function SpotCard({ className, children }: { className?: string; children: ReactNode }) {
+  const spot = useSpotlight<HTMLDivElement>()
+  return (
+    <div className={`spotlight ${className ?? ''}`} {...spot}>
+      {children}
+    </div>
+  )
+}
+
 function SectionHead({ kicker, title, body, center = true }: { kicker: string; title: string; body?: string; center?: boolean }) {
   return (
     <Reveal className={center ? 'mx-auto max-w-3xl text-center' : 'max-w-xl'}>
       <p className="mb-3 text-sm font-semibold uppercase tracking-[0.14em] text-accent">{kicker}</p>
-      <h2 className="font-display text-[34px] font-semibold leading-[1.08] tracking-tight text-ink sm:text-5xl">{title}</h2>
+      <h2 className="font-display text-5xl font-semibold tracking-tight text-ink">{title}</h2>
       {body && <p className="mt-5 text-lg leading-relaxed text-ink-2">{body}</p>}
     </Reveal>
   )
@@ -132,7 +143,7 @@ function Hero() {
           <HeartPulse className="size-4 text-accent" aria-hidden />
           {t('landing.eyebrow')}
         </motion.span>
-        <h1 className="font-display text-[44px] font-semibold leading-[1.02] tracking-[-0.035em] text-ink sm:text-7xl lg:text-[88px]">
+        <h1 className="font-display text-7xl font-semibold tracking-[-0.035em] text-ink">
           <motion.span className="block" initial={{ opacity: 0, y: 30, filter: 'blur(8px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }} transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1], delay: 0.05 }}>
             {words1}
           </motion.span>
@@ -145,7 +156,7 @@ function Hero() {
             {words2}
           </motion.span>
         </h1>
-        <motion.p initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.35 }} className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-2 sm:text-xl">
+        <motion.p initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.35 }} className="mt-6 max-w-2xl text-xl leading-relaxed text-ink-2">
           {t('landing.heroSubtitle')}
         </motion.p>
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.5 }} className="mt-9 flex w-full flex-col items-center gap-3 sm:w-auto sm:flex-row">
@@ -210,8 +221,8 @@ export function LandingPage() {
           <div className="mx-auto mt-14 grid max-w-6xl gap-4 md:grid-cols-3">
             {problems.map(({ Icon, key }, i) => (
               <Reveal key={key} delay={i * 0.08}>
-                <div className="card h-full p-7 transition-transform duration-300 hover:-translate-y-1">
-                  <Icon className="mb-5 size-7 text-ink-3" aria-hidden />
+                <div className="group card lift h-full p-7">
+                  <Icon className="pop-icon mb-5 size-7 text-ink-3 transition-colors group-hover:text-accent" aria-hidden />
                   <h3 className="text-lg font-semibold text-ink">{t(`landing.problem.items.${key}.title`)}</h3>
                   <p className="mt-2 text-ink-2">{t(`landing.problem.items.${key}.body`)}</p>
                 </div>
@@ -226,14 +237,14 @@ export function LandingPage() {
           <div className="mx-auto mt-14 grid max-w-6xl gap-4 sm:grid-cols-2">
             {features.map(({ Icon, key }, i) => (
               <Reveal key={key} delay={i * 0.06}>
-                <div className="group card relative h-full overflow-hidden p-7 transition-all duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-lg)] sm:p-8">
+                <SpotCard className="group card lift relative h-full overflow-hidden p-7 sm:p-8">
                   <div className="absolute -right-16 -top-16 size-48 rounded-full bg-[radial-gradient(circle,var(--glow-1),transparent_70%)] opacity-0 transition-opacity duration-500 group-hover:opacity-100" aria-hidden />
-                  <div className="relative mb-5 grid size-12 place-items-center rounded-2xl bg-accent-soft text-accent">
+                  <div className="pop-icon relative mb-5 grid size-12 place-items-center rounded-2xl bg-accent-soft text-accent">
                     <Icon className="size-6" aria-hidden />
                   </div>
                   <h3 className="relative text-xl font-semibold text-ink">{t(`landing.features.${key}.title`)}</h3>
                   <p className="relative mt-2 text-ink-2">{t(`landing.features.${key}.body`)}</p>
-                </div>
+                </SpotCard>
               </Reveal>
             ))}
           </div>
@@ -246,8 +257,8 @@ export function LandingPage() {
             <div className="absolute left-0 right-0 top-8 hidden h-px bg-gradient-to-r from-transparent via-line-strong to-transparent md:block" aria-hidden />
             {steps.map(({ Icon, key }, i) => (
               <Reveal key={key} delay={i * 0.1}>
-                <li className="relative flex flex-col items-center text-center md:px-2">
-                  <div className="glass relative z-10 mb-5 grid size-16 place-items-center rounded-[22px] text-accent">
+                <li className="group relative flex flex-col items-center text-center md:px-2">
+                  <div className="pop-icon glass relative z-10 mb-5 grid size-16 place-items-center rounded-[22px] text-accent">
                     <Icon className="size-7" aria-hidden />
                     <span className="absolute -right-1.5 -top-1.5 grid size-6 place-items-center rounded-full bg-accent text-xs font-bold text-accent-contrast">{i + 1}</span>
                   </div>
@@ -278,7 +289,7 @@ export function LandingPage() {
                 { Icon: BedDouble, label: t('landing.healthSection.sleep'), value: '7.4', unit: 'h', delta: '+0.3 h', color: 'var(--series-3)' },
               ].map(({ Icon, label, value, unit, delta, color }, i) => (
                 <Reveal key={label} delay={i * 0.1}>
-                  <div className="glass flex items-center gap-4 rounded-3xl p-5">
+                  <div className="group glass lift flex items-center gap-4 rounded-3xl p-5">
                     <div className="grid size-12 place-items-center rounded-2xl bg-surface-strong shadow-sm">
                       <Icon className="size-6" style={{ color }} aria-hidden />
                     </div>
@@ -311,7 +322,7 @@ export function LandingPage() {
         <section className="px-4 pb-24 pt-8 sm:pb-32">
           <Reveal className="glass-strong relative mx-auto max-w-5xl overflow-hidden rounded-[36px] px-6 py-16 text-center sm:px-16 sm:py-20">
             <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60%_80%_at_50%_0%,var(--glow-1),transparent)]" aria-hidden />
-            <h2 className="font-display text-4xl font-semibold tracking-tight text-ink sm:text-5xl">{t('landing.finalCta.title')}</h2>
+            <h2 className="font-display text-5xl font-semibold tracking-tight text-ink">{t('landing.finalCta.title')}</h2>
             <p className="mx-auto mt-4 max-w-xl text-lg text-ink-2">{t('landing.finalCta.body')}</p>
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
               <Link to="/auth/trainer?mode=signup" className={buttonClass('primary', 'lg')}>
@@ -335,17 +346,17 @@ export function LandingPage() {
             <h3 className="mb-3 text-sm font-semibold text-ink">{t('landing.footer.product')}</h3>
             <ul className="space-y-2 text-sm text-ink-2">
               <li>
-                <a href="#features" className="hover:text-accent">
+                <a href="#features" className="transition-colors hover:text-accent">
                   {t('nav.features')}
                 </a>
               </li>
               <li>
-                <a href="#how" className="hover:text-accent">
+                <a href="#how" className="transition-colors hover:text-accent">
                   {t('nav.howItWorks')}
                 </a>
               </li>
               <li>
-                <a href="#health" className="hover:text-accent">
+                <a href="#health" className="transition-colors hover:text-accent">
                   {t('nav.appleHealth')}
                 </a>
               </li>
@@ -355,7 +366,7 @@ export function LandingPage() {
             <h3 className="mb-3 text-sm font-semibold text-ink">{t('landing.footer.legal')}</h3>
             <ul className="space-y-2 text-sm text-ink-2">
               <li>
-                <Link to="/privacy" className="hover:text-accent">
+                <Link to="/privacy" className="transition-colors hover:text-accent">
                   {t('landing.footer.privacy')}
                 </Link>
               </li>

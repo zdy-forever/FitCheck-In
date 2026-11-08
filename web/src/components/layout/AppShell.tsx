@@ -84,11 +84,11 @@ export function AppShell() {
           </Link>
           <nav className="hidden items-center gap-1 lg:flex" aria-label={t('a11y.primaryNav')}>
             {items.map(({ to, label, Icon, end }) => (
-              <NavLink key={to} to={to} end={end} className={({ isActive }) => clsx('relative flex h-10 items-center gap-2 rounded-full px-3.5 text-sm font-medium transition-colors', isActive ? 'text-ink' : 'text-ink-3 hover:text-ink')}>
+              <NavLink key={to} to={to} end={end} className={({ isActive }) => clsx('group relative flex h-10 items-center gap-2 rounded-full px-3.5 text-sm font-medium transition-colors', isActive ? 'text-ink' : 'text-ink-3 hover:bg-sunken/70 hover:text-ink')}>
                 {({ isActive }) => (
                   <>
                     {isActive && <motion.span layoutId="nav-pill" className="absolute inset-0 rounded-full bg-surface-strong shadow-sm" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
-                    <Icon className="relative size-4" aria-hidden />
+                    <Icon className="pop-icon relative size-4" aria-hidden />
                     <span className="relative">{label}</span>
                   </>
                 )}
@@ -138,7 +138,7 @@ export function AppShell() {
       <nav className="fixed inset-x-3 bottom-3 z-40 lg:hidden" aria-label={t('a11y.primaryNav')}>
         <div className="glass-strong mx-auto flex max-w-md items-stretch justify-between rounded-[26px] p-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))]">
           {items.map(({ to, label, Icon, end }) => (
-            <NavLink key={to} to={to} end={end} className={({ isActive }) => clsx('relative flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-[20px] text-[11px] font-medium transition-colors', isActive ? 'text-accent' : 'text-ink-3')}>
+            <NavLink key={to} to={to} end={end} className={({ isActive }) => clsx('relative flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-[20px] text-2xs font-medium transition-[color,transform] duration-200 active:scale-90', isActive ? 'text-accent' : 'text-ink-3')}>
               {({ isActive }) => (
                 <>
                   {isActive && <motion.span layoutId="tab-pill" className="absolute inset-0 rounded-[20px] bg-accent-soft" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}

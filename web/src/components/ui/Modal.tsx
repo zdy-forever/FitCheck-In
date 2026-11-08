@@ -101,16 +101,16 @@ export function ConfirmModal({
   const { t } = useTranslation()
   return (
     <Modal open={open} onClose={onClose} title={title}>
-      {body && <p className="mb-6 text-[15px] text-ink-2">{body}</p>}
+      {body && <p className="mb-6 text-md text-ink-2">{body}</p>}
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <button type="button" onClick={onClose} className="h-11 rounded-2xl px-5 text-[15px] font-medium text-ink-2 hover:bg-sunken">
+        <button type="button" onClick={onClose} className="h-11 rounded-2xl px-5 text-md font-medium text-ink-2 hover:bg-sunken">
           {t('common.cancel')}
         </button>
         <button
           type="button"
           onClick={onConfirm}
           disabled={loading}
-          className={`h-11 rounded-2xl px-5 text-[15px] font-medium transition active:scale-[0.97] disabled:opacity-50 ${danger ? 'bg-bad text-white' : 'bg-accent text-accent-contrast'}`}
+          className={`h-11 rounded-2xl px-5 text-md font-medium transition active:scale-[0.97] disabled:opacity-50 ${danger ? 'bg-bad text-white' : 'bg-accent text-accent-contrast'}`}
         >
           {loading ? t('common.saving') : confirmLabel}
         </button>

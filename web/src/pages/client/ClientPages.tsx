@@ -8,6 +8,7 @@ import {
   Dumbbell,
   MessageSquareText,
   NotebookPen,
+  Pencil,
   Smartphone,
   UserPlus,
   Users,
@@ -186,9 +187,9 @@ function TrainersCard({ relationships, onChanged }: { relationships: Awaited<Ret
       {active.length === 0 ? (
         <EmptyState icon={<UserPlus className="size-6" />} title={t('client.noTrainers')} />
       ) : (
-        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="stagger grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {active.map((r) => (
-            <li key={r.id} className="flex items-center gap-3 rounded-2xl border border-line bg-surface-strong p-3">
+            <li key={r.id} className="lift flex items-center gap-3 rounded-2xl border border-line bg-surface-strong p-3">
               <div className="grid size-10 place-items-center rounded-full bg-accent-soft font-semibold text-accent">{r.peer?.display_name?.[0] ?? '?'}</div>
               <span className="flex-1 truncate font-medium text-ink">{r.peer?.display_name}</span>
               <Button size="sm" variant="ghost" onClick={() => setEnding({ id: r.id, name: r.peer?.display_name ?? '' })}>
@@ -268,7 +269,7 @@ export function ClientHistoryPage() {
       ) : items.length === 0 ? (
         <EmptyState icon={<CalendarClock className="size-6" />} title={t('sessions.none')} />
       ) : (
-        <ol className="relative ml-3 border-l border-line pl-6 sm:ml-4 sm:pl-8" data-testid="timeline">
+        <ol className="stagger relative ml-3 border-l border-line pl-6 sm:ml-4 sm:pl-8" data-testid="timeline">
           {items.map((it) => (
             <li key={`${it.kind}-${it.kind === 'session' ? it.session.id : it.kind === 'checkin' ? it.checkin.id : it.note.id}`} className="relative mb-5">
               <span className={clsx('absolute -left-[38px] top-4 grid size-7 place-items-center rounded-full ring-4 ring-[var(--bg)] sm:-left-[46px]', it.kind === 'session' ? 'bg-accent text-accent-contrast' : it.kind === 'checkin' ? 'bg-surface-strong text-ink-2 border border-line' : 'bg-demo-soft text-demo')} aria-hidden>
@@ -276,7 +277,7 @@ export function ClientHistoryPage() {
               </span>
               {it.kind === 'checkin' && <CheckinCard checkin={it.checkin} />}
               {it.kind === 'note' && (
-                <article className="rounded-2xl border border-line bg-surface-strong p-4">
+                <article className="lift rounded-2xl border border-line bg-surface-strong p-4">
                   <div className="mb-1 flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-semibold text-ink">{t('notes.fromCoach')}</span>
                     <span className="text-ink-3">
@@ -299,14 +300,14 @@ export function ClientHistoryPage() {
   )
 }
 
-export function SessionCard({ session, trainerName, onFeedback }: { session: SessionWithDetails; trainerName?: string; onFeedback?: () => void }) {
+export function SessionCard({ session, trainerName, onFeedback, onEdit }: { session: SessionWithDetails; trainerName?: string; onFeedback?: () => void; onEdit?: () => void }) {
   const { t, i18n } = useTranslation()
   const f = useFormatters(i18n.language)
   const fb = session.post_session_feedback[0]
   const past = new Date(session.scheduled_at).getTime() < Date.now()
   const volume = session.session_exercises.reduce((s, e) => s + (e.sets ?? 0) * (e.reps ?? 0) * Number(e.weight_kg ?? 0), 0)
   return (
-    <article className="rounded-2xl border border-line bg-surface-strong p-4" data-testid="session-card">
+    <article className="lift rounded-2xl border border-line bg-surface-strong p-4" data-testid="session-card">
       <header className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="font-semibold text-ink">{session.title ?? t(`sessions.types.${session.session_type}`)}</div>
@@ -319,6 +320,17 @@ export function SessionCard({ session, trainerName, onFeedback }: { session: Ses
         <div className="flex items-center gap-2">
           <Badge tone={session.status === 'completed' ? 'good' : session.status === 'cancelled' ? 'neutral' : 'accent'}>{t(`sessions.statuses.${session.status}`)}</Badge>
           {session.actual_intensity && <Badge>RPE {session.actual_intensity}</Badge>}
+          {onEdit && (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="grid size-9 place-items-center rounded-xl border border-line bg-surface-strong text-ink-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-accent/40 hover:text-accent hover:shadow-md active:scale-90"
+              aria-label={t('sessions.edit')}
+              data-testid="edit-session"
+            >
+              <Pencil className="size-4" aria-hidden />
+            </button>
+          )}
         </div>
       </header>
       {session.session_exercises.length > 0 && (
