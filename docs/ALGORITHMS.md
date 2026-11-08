@@ -70,7 +70,7 @@ which fixes problems found in the original composite:
 | 5 | VO₂ "cardio score" can reach 125 | One long-term marker dominates a daily score | VO₂ max not used for daily readiness |
 | 6 | Sleep debt vs fixed 8 h for everyone | A 7 h sleeper is always "in debt" | Compared with own typical sleep (bounded 7–9 h); extra sleep helps a little, short sleep hurts more |
 | 7 | Readiness ⊃ Body Battery ⊃ Recovery ⊃ sleep/HRV | Same signals counted 3–4 times | Readiness = Recovery (each signal once) − load penalty + check-in adjustment |
-| 8 | The client's own check-in was not used | Subjective state ignored | Energy, sleep quality, soreness and pain adjust readiness and appear as drivers |
+| 8 | The client's own check-in was not used | Subjective state ignored | Soreness and pain adjust readiness; self-rated sleep/energy only fill in when the watch has no measurement |
 
 ### Formulas
 
@@ -83,8 +83,12 @@ Floors: HRV 7 % of mean, RHR 2 bpm, sleep 0.5 h. Signed so positive = better; cl
 * **Stress** (physiological strain) = `35 − 15 × z_autonomic`, HRV and RHR only, floor 10.
 * **Training load**: session-RPE model (section 4b). Acute = last 7 days, chronic =
   previous 21 days ÷ 3. No penalty up to a ratio of 1.3; then 25 points per +1.0, capped at 15.
-* **Check-in** (same local day): energy `(e−3)×3`, sleep quality `(q−3)×2`,
-  soreness `−max(0,s−3)×1.2`, pain `−max(0,p−1)×1.5`.
+* **Check-in** (same local day): soreness `−max(0,s−3)×1.2` and pain `−max(0,p−1)×1.5`
+  always (no wearable measures them). Sleep quality `(q−3)×2` only when last night's sleep
+  was not measured; energy `(e−3)×3` only when recovery could not be computed. Otherwise the
+  self-rating would re-count a signal that is already in recovery (and a client who used
+  "Use Apple Watch data" would feed the score back into itself). Watch-pre-filled answers
+  never count.
 * **Readiness** = Recovery − load penalty + check-in adjustment, clamped 0–100. With no
   wearable data but a check-in, a `limited` readiness is computed from the check-in alone.
 * Status: `ok` with all 3 signals, `limited` with 2 (or check-in only), `insufficient`
@@ -99,7 +103,7 @@ Floors: HRV 7 % of mean, RHR 2 bpm, sleep 0.5 h. Signed so positive = better; cl
 | Normal day, high-HRV person (85 ms) | **72** / 50 | **65** / 35 |
 | Bad day: HRV −30 %, RHR +6, sleep 5.5 h | 45 / 83 | 29 / 80 |
 | Great day: HRV +20 %, RHR −3, sleep 8.2 h | 77 / 44 | 88 / 10 |
-| Normal day + check-in (energy 2, soreness 7, pain 5) | unchanged | 65 → 51 |
+| Normal day + check-in (energy 2, soreness 7, pain 5) | unchanged | 65 → 54 (soreness, pain) |
 | Normal day + load spike (ratio 1.8) | small change | 65 → 52 |
 
 Tests: `web/tests/metrics/readiness-v2.test.ts` (13 cases) and the live integration test
@@ -195,8 +199,9 @@ score, the exact mapped value and the rounded answer.
 
 Mental state, soreness, pain and the goal are subjective and never pre-filled.
 Answers the client keeps unchanged are stored in `pre_session_checkins.watch_prefilled`. The
-coach's card marks them with a watch icon. Readiness skips their check-in adjustment, because
-they are derived from the HRV / sleep data that recovery already counts.
+coach's card marks them with a watch icon. They never feed back into readiness (see the
+check-in rule in section 4: self-rated sleep/energy are ignored whenever the watch measured
+them, so editing a pre-filled value cannot loop the score into itself either).
 
 ## 5. The sufficiency layer
 

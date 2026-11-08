@@ -447,7 +447,7 @@ const en = {
     sleepExplain: 'Time asleep last night (noon-to-noon window), from Apple Health sleep analysis.',
     stages: { deep: 'Deep', rem: 'REM', core: 'Core', awake: 'Awake' },
     readiness: 'Readiness',
-    readinessExplain: 'Recovery adjusted for recent training load and today’s check-in answers. 65 = your normal day; higher is better.',
+    readinessExplain: 'Recovery adjusted for recent training load and today’s self-reported soreness and pain. Self-rated sleep and energy only count when the watch did not measure them. 65 = your normal day; higher is better.',
     recovery: 'Recovery',
     recoveryExplain: 'Today’s HRV, resting heart rate and sleep compared only with your own last 4–28 days (never with other people). 65 = your normal.',
     stress: 'Stress',

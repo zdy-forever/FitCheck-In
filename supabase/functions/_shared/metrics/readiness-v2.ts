@@ -36,7 +36,10 @@
  *  - Stress (physiological strain) = 100 − recovery-like scale built from HRV↓ and RHR↑ only
  *    (sleep excluded so it is not double-counted): 35 − 15 × z, floored at 10.
  *  - Readiness = recovery, minus a load penalty when the acute:chronic ratio is high,
- *    nudged by the subjective check-in (energy, soreness, pain, sleep quality) when present.
+ *    adjusted by self-reported soreness and pain (which no wearable measures). Self-rated
+ *    sleep quality / energy only count when their measured counterpart (sleep signal /
+ *    recovery) is missing, so the same thing is never counted twice; watch-pre-filled
+ *    answers never count.
  *
  * Every output lists its drivers so the UI can explain the number.
  * These are coaching estimates, not medical assessments.
@@ -188,13 +191,21 @@ export function computeReadinessV2(input: V2Input): V2Result {
     loadPenalty = clamp((acr - 1.3) * 25, 0, 15)
   }
 
-  // ── Subjective check-in (the client's own report is a valid, first-class signal) ──
+  // ── Subjective check-in ──
+  // Only what the watch cannot measure is added on top of the measured signals:
+  //  * soreness and pain — always (no wearable signal for them);
+  //  * sleep quality — only when last night's sleep was not measured (otherwise the sleep
+  //    signal above already counts it, and a self-rating would count it twice);
+  //  * energy — only when recovery could not be computed (recovery is the measured
+  //    counterpart; with it present, a self-rating would re-count HRV/RHR/sleep).
+  // Answers pre-filled from the watch arrive as null and are never used, whatever the case.
   let checkinAdj = 0
   const c = input.checkin
   if (c) {
+    const sleepMeasured = signals.some((s) => s.key === 'sleep' && s.z !== null)
     const parts: Driver[] = [
-      { key: 'checkinEnergy', impact: c.energy === null ? 0 : (c.energy - 3) * 3 }, // 1..5 → −6..+6
-      { key: 'checkinSleep', impact: c.sleepQuality === null ? 0 : (c.sleepQuality - 3) * 2 }, // −4..+4
+      { key: 'checkinEnergy', impact: c.energy === null || recoveryValue !== null ? 0 : (c.energy - 3) * 3 }, // 1..5 → −6..+6
+      { key: 'checkinSleep', impact: c.sleepQuality === null || sleepMeasured ? 0 : (c.sleepQuality - 3) * 2 }, // −4..+4
       { key: 'checkinSoreness', impact: -Math.max(0, c.soreness - 3) * 1.2 }, // 0..−8.4
       { key: 'checkinPain', impact: -Math.max(0, c.pain - 1) * 1.5 }, // 0..−13.5
     ]

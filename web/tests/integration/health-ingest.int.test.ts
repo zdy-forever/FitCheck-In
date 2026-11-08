@@ -279,8 +279,12 @@ describe.skipIf(!ANON)('readiness v2 end-to-end', () => {
     const res = await fetch(`${URL}/functions/v1/refresh-snapshot`, { method: 'POST', headers: { apikey: ANON, Authorization: `Bearer ${c.token}`, 'Content-Type': 'application/json' }, body: '{}' })
     expect(res.status).toBe(200)
     const after = await read()
-    expect(after.scores.readiness.value!).toBeLessThan(before.scores.readiness.value! - 10)
-    expect(after.drivers.map((d) => d.key)).toEqual(expect.arrayContaining(['checkinPain', 'checkinEnergy']))
+    expect(after.scores.readiness.value!).toBeLessThan(before.scores.readiness.value! - 8)
+    const keys = after.drivers.map((d) => d.key)
+    expect(keys).toEqual(expect.arrayContaining(['checkinPain', 'checkinSoreness']))
+    // Sleep and recovery were measured, so self-rated sleep/energy are not added on top.
+    expect(keys).not.toContain('checkinEnergy')
+    expect(keys).not.toContain('checkinSleep')
   })
 
   it('refresh-snapshot requires a token and only refreshes the caller', async () => {

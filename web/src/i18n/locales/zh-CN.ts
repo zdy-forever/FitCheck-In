@@ -448,7 +448,7 @@ const zhCN: Translation = {
     sleepExplain: '昨晚的睡眠时长（中午至中午的统计窗口），来自 Apple 健康睡眠分析。',
     stages: { deep: '深睡', rem: '快速眼动', core: '核心睡眠', awake: '清醒' },
     readiness: '准备度',
-    readinessExplain: '以恢复度为基础，再结合近期训练负荷和今天问卷的回答进行调整。65 = 本人的正常状态，越高越好。',
+    readinessExplain: '以恢复度为基础，再结合近期训练负荷和今天自评的酸痛、疼痛进行调整。自评的睡眠和精力只在手表没有测到时才计入。65 = 本人的正常状态，越高越好。',
     recovery: '恢复度',
     recoveryExplain: '只把今天的 HRV、静息心率和睡眠与本人过去 4–28 天比较（从不与他人比较）。65 = 本人的正常状态。',
     stress: '压力',

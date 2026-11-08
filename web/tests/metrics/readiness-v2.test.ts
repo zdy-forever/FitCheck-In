@@ -82,29 +82,52 @@ describe('readiness v2 — fixes to the health+ composite', () => {
     expect(steady.drivers.some((d) => d.key === 'load')).toBe(false)
   })
 
-  it('the client’s own check-in adjusts readiness and is listed as drivers', () => {
+  it('soreness and pain (not measurable by a watch) adjust readiness and are listed as drivers', () => {
     const base = { today: { hrv: 50, rhr: 56, sleepHours: 7.4 }, history: person(50, 56) }
     const r = computeReadinessV2({ ...base, checkin: { energy: 2, sleepQuality: 3, soreness: 7, pain: 5 } })
-    expect(r.readiness.value!).toBeLessThan(r.recovery.value! - 10)
-    expect(r.drivers.map((d) => d.key)).toEqual(expect.arrayContaining(['checkinPain', 'checkinSoreness', 'checkinEnergy']))
+    expect(r.readiness.value!).toBeLessThan(r.recovery.value! - 8)
+    const keys = r.drivers.map((d) => d.key)
+    expect(keys).toEqual(expect.arrayContaining(['checkinPain', 'checkinSoreness']))
     expect(r.usedCheckin).toBe(true)
   })
 
-  it('answers pre-filled from the watch (null) do not re-count HRV/sleep; soreness and pain still count', () => {
+  it('self-rated sleep / energy never re-count what the watch measured (no feedback loop)', () => {
     const base = { today: { hrv: 50, rhr: 56, sleepHours: 7.4 }, history: person(50, 56) }
-    const self = computeReadinessV2({ ...base, checkin: { energy: 5, sleepQuality: 5, soreness: 0, pain: 0 } })
-    const watch = computeReadinessV2({ ...base, checkin: { energy: null, sleepQuality: null, soreness: 0, pain: 0 } })
+    const neutral = computeReadinessV2({ ...base, checkin: { energy: 3, sleepQuality: 3, soreness: 0, pain: 0 } })
+    // Whatever is typed for sleep/energy — or whether it came from the watch — readiness is the same.
+    for (const ans of [
+      { energy: 5, sleepQuality: 5 },
+      { energy: 1, sleepQuality: 1 },
+      { energy: null, sleepQuality: null },
+    ]) {
+      const r = computeReadinessV2({ ...base, checkin: { ...ans, soreness: 0, pain: 0 } })
+      expect(r.readiness.value).toBe(neutral.readiness.value)
+      expect(r.readiness.value).toBe(r.recovery.value)
+      expect(r.drivers.map((d) => d.key)).not.toEqual(expect.arrayContaining(['checkinEnergy']))
+      expect(r.drivers.map((d) => d.key)).not.toEqual(expect.arrayContaining(['checkinSleep']))
+    }
+  })
+
+  it('self-rated sleep counts only when sleep was not measured (HRV + RHR still give recovery)', () => {
+    const noSleep = { today: { hrv: 50, rhr: 56 }, history: person(50, 56) }
+    const good = computeReadinessV2({ ...noSleep, checkin: { energy: 3, sleepQuality: 5, soreness: 0, pain: 0 } })
+    const bad = computeReadinessV2({ ...noSleep, checkin: { energy: 3, sleepQuality: 1, soreness: 0, pain: 0 } })
+    expect(good.recovery.value).not.toBeNull()
+    expect(good.readiness.value!).toBeGreaterThan(bad.readiness.value!)
+    expect(bad.drivers.map((d) => d.key)).toContain('checkinSleep')
+    expect(bad.drivers.map((d) => d.key)).not.toContain('checkinEnergy') // recovery exists
+    // …but a watch-pre-filled answer still never counts.
+    const watch = computeReadinessV2({ ...noSleep, checkin: { energy: null, sleepQuality: null, soreness: 0, pain: 0 } })
     expect(watch.readiness.value).toBe(watch.recovery.value)
-    expect(self.readiness.value!).toBeGreaterThan(watch.readiness.value!)
-    expect(watch.drivers.map((d) => d.key)).not.toEqual(expect.arrayContaining(['checkinEnergy']))
-    const hurt = computeReadinessV2({ ...base, checkin: { energy: null, sleepQuality: null, soreness: 8, pain: 6 } })
-    expect(hurt.readiness.value!).toBeLessThan(hurt.recovery.value!)
   })
 
   it('with no wearable data, a check-in alone gives a clearly limited readiness', () => {
     const r = computeReadinessV2({ today: {}, history: { hrv: [], rhr: [], sleepHours: [] }, checkin: { energy: 4, sleepQuality: 4, soreness: 2, pain: 0 } })
     expect(r.readiness.status).toBe('limited')
     expect(r.recovery.value).toBeNull()
+    // Here the self-ratings are the only information, so they do count.
+    expect(r.drivers.map((d) => d.key)).toEqual(expect.arrayContaining(['checkinEnergy', 'checkinSleep']))
+    expect(r.readiness.value!).toBeGreaterThan(65)
   })
 
   it('all scores stay within 0–100 for extreme inputs', () => {
