@@ -634,6 +634,9 @@ const zhCN: Translation = {
     sharing: '健康数据共享',
     sharingSubtitle: '按教练分别选择其可查看的 Apple 健康数据类别。关闭后立即生效。',
     sharingNoTrainers: '关联教练后即可管理共享设置。',
+    sharingTrainer: '教练',
+    sharingTrainerHint: '你有 {{count}} 位教练，每位教练只能看到你为其开启的类别。',
+    sharingTrainerOption: '{{name}} · 已共享 {{granted}}/{{total}}',
     categories: {
       scores: '准备度与恢复度估计',
       hrv: 'HRV',

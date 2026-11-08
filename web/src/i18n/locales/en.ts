@@ -633,6 +633,9 @@ const en = {
     sharing: 'Health data sharing',
     sharingSubtitle: 'Choose, per trainer, which Apple Health categories they can see. Turning a category off takes effect immediately.',
     sharingNoTrainers: 'Connect with a trainer to manage sharing.',
+    sharingTrainer: 'Trainer',
+    sharingTrainerHint: 'You have {{count}} trainers. Each one only sees what you turn on for them.',
+    sharingTrainerOption: '{{name}} · {{granted}}/{{total}} shared',
     categories: {
       scores: 'Readiness & recovery estimates',
       hrv: 'HRV',

@@ -1,6 +1,6 @@
 import { clsx } from 'clsx'
 import { KeyRound, ShieldCheck, Smartphone, Trash2, UserRound } from 'lucide-react'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Button } from '@/components/ui/Button'
@@ -13,7 +13,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useAuth, useProfile } from '@/features/auth/AuthProvider'
 import { useLiveQuery } from '@/hooks/useLiveQuery'
 import { LANGUAGES, normalizeLanguage, type Language } from '@/i18n'
-import { api, type HealthCategory } from '@/lib/api'
+import { api, type HealthCategory, type RelationshipWithPeer, type SharingPermission } from '@/lib/api'
 import { errorKey } from '@/lib/errors'
 import { useFormatters } from '@/lib/format'
 
@@ -46,6 +46,55 @@ function Toggle({ checked, onChange, label, disabled, busy }: { checked: boolean
         style={{ transform: checked ? 'translateX(20px)' : 'translateX(0)' }}
       />
     </button>
+  )
+}
+
+/**
+ * Sharing is set per trainer. With one trainer the list is shown directly; with several, a
+ * selector picks whose permissions are being edited (one list at a time instead of 11 × N
+ * switches). The selection is kept per tab session and falls back to the first trainer when
+ * the selected one is no longer connected.
+ */
+function SharingTrainerPicker({
+  rels,
+  perms,
+  children,
+}: {
+  rels: RelationshipWithPeer[]
+  perms: SharingPermission[]
+  children: (r: RelationshipWithPeer) => ReactNode
+}) {
+  const { t } = useTranslation()
+  const [picked, setPicked] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem('fitcheckin.sharingTrainer')
+    } catch {
+      return null
+    }
+  })
+  const current = rels.find((r) => r.id === picked) ?? rels[0]!
+  if (rels.length === 1) return <>{children(current)}</>
+  const grantedCount = (relId: string) => perms.filter((p) => p.relationship_id === relId && p.granted).length
+  const total = (relId: string) => perms.filter((p) => p.relationship_id === relId).length
+  const pick = (id: string) => {
+    setPicked(id)
+    try {
+      sessionStorage.setItem('fitcheckin.sharingTrainer', id)
+    } catch {
+      /* storage unavailable: selection just isn't remembered */
+    }
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      <SelectField label={t('settings.sharingTrainer')} value={current.id} onChange={(e) => pick(e.target.value)} data-testid="sharing-trainer-select" hint={t('settings.sharingTrainerHint', { count: rels.length })}>
+        {rels.map((r) => (
+          <option key={r.id} value={r.id}>
+            {t('settings.sharingTrainerOption', { name: r.peer?.display_name ?? '—', granted: grantedCount(r.id), total: total(r.id) })}
+          </option>
+        ))}
+      </SelectField>
+      {children(current)}
+    </div>
   )
 }
 
@@ -299,10 +348,10 @@ export function SettingsPage() {
             ) : sharingQ.data.rels.length === 0 ? (
               <p className="text-sm text-ink-3">{t('settings.sharingNoTrainers')}</p>
             ) : (
-              <div className="flex flex-col gap-4">
-                {sharingQ.data.rels.map((r) => (
+              <SharingTrainerPicker rels={sharingQ.data.rels} perms={sharingQ.data.perms}>
+                {(r) => (
                   <div key={r.id} className="rounded-2xl border border-line" data-testid="sharing-trainer">
-                    <div className="border-b border-line px-4 py-3 font-semibold text-ink">{r.peer?.display_name}</div>
+                    {sharingQ.data!.rels.length === 1 && <div className="border-b border-line px-4 py-3 font-semibold text-ink">{r.peer?.display_name}</div>}
                     <ul className="divide-y divide-line">
                       {CATEGORIES.map((c) => {
                         const perm = sharingQ.data!.perms.find((p) => p.relationship_id === r.id && p.category === c)
@@ -321,8 +370,8 @@ export function SettingsPage() {
                       })}
                     </ul>
                   </div>
-                ))}
-              </div>
+                )}
+              </SharingTrainerPicker>
             )}
             {sharingQ.data && sharingQ.data.devices.length > 0 && (
               <div className="mt-5">
