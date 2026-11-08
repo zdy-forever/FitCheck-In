@@ -1,7 +1,7 @@
 From cbaf4799dcf7e2e6f1c50dc17dcd90e6f040d52e Mon Sep 17 00:00:00 2001
 From: u7782042 <u7782042@anu.edu.au>
 Date: Sun, 8 Nov 2026 15:58:33 +1100
-Subject: [PATCH 2/2] FitCheck-In Sync: upload Apple Workout Effort with
+Subject: [PATCH 2/3] FitCheck-In Sync: upload Apple Workout Effort with
  workouts (iOS 18+)
 
 Reads workoutEffortScore (user-rated) or estimatedWorkoutEffortScore for each

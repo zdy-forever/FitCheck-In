@@ -16,6 +16,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.119.0'
 import { DEMO_COACH_DAY_OFFSETS, generateDemoSamples } from '../_shared/demo-data.ts'
 import { isValidTimeZone } from '../_shared/metrics/calendar.ts'
+import { HEALTH_CATEGORIES } from '../_shared/metrics/health-schema.ts'
 import { recomputeSnapshot } from '../_shared/snapshot.ts'
 
 const corsHeaders = {
@@ -100,7 +101,8 @@ Deno.serve(async (req) => {
       .select('id')
       .single()
     if (relErr || !rel) throw new Error('relationship_failed')
-    const categories = ['scores', 'hrv', 'resting_heart_rate', 'heart_rate', 'sleep', 'activity', 'workouts', 'vo2_max']
+    // Demo client shares every category (single source of truth, so new categories are included).
+    const categories = HEALTH_CATEGORIES
     await admin.from('health_sharing_permissions').insert(
       categories.map((category) => ({ relationship_id: rel.id, client_id: clientId, trainer_id: trainerId, category, granted: true })),
     )

@@ -1,7 +1,7 @@
 -- pgTAP Row Level Security tests. Run with: npx supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(73);
+select plan(80);
 
 -- ─────────────────────────── fixtures (as superuser) ─────────────────
 -- Users are created through auth.users so the real handle_new_user trigger runs.
@@ -189,8 +189,23 @@ select pg_temp.as_user('00000000-0000-0000-0000-0000000000c1');
 select throws_ok($$insert into public.health_samples (user_id, sample_id, metric_type, value, unit, start_at, measured_at)
   values (auth.uid(), 'x', 'hrv_sdnn', 1, 'ms', now(), now())$$, '42501', null, 'clients cannot write samples directly (Edge Function only)');
 
+select pg_temp.as_admin();
+insert into public.health_snapshots (user_id, snapshot_date, time_zone, algorithm_version, completeness, assessment) values
+  ('00000000-0000-0000-0000-0000000000c1', current_date, 'UTC', 'test', 1,
+   '{"scores":{"readiness":{"value":70}},"latest":{"hrv":{"value":48},"restingHeartRate":{"value":56}},"signals":[1],"fitness":{"vitals":{"x":1},"cardio":{"x":1}},"rawSummary":{"sleepHours":7,"baselines":{"hrv":50,"sleepHours":7}}}');
+
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
 select is((select count(*)::int from public.health_samples), 2, 'trainer A sees only granted categories (hrv + sleep, not RHR)');
+select is((select count(*)::int from public.health_snapshots), 0, 'trainers cannot read snapshot rows directly');
+select is((public.client_health_snapshot('00000000-0000-0000-0000-0000000000c1') -> 'assessment' #> '{scores,readiness,value}')::int, 70, 'granted scores are returned');
+select is((public.client_health_snapshot('00000000-0000-0000-0000-0000000000c1') -> 'assessment' #> '{latest,hrv,value}')::int, 48, 'granted HRV is returned');
+select ok((public.client_health_snapshot('00000000-0000-0000-0000-0000000000c1') -> 'assessment' #> '{latest,restingHeartRate}') is null, 'ungranted resting HR is stripped');
+select ok((public.client_health_snapshot('00000000-0000-0000-0000-0000000000c1') -> 'assessment' #> '{fitness,vitals}') is null, 'ungranted vitals are stripped');
+select ok((public.client_health_snapshot('00000000-0000-0000-0000-0000000000c1') -> 'assessment' -> 'signals') is null, 'raw signals are never sent to trainers');
+
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000b1');
+select ok(public.client_health_snapshot('00000000-0000-0000-0000-0000000000c1') is null, 'trainer without grants gets no snapshot');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000000a1');
 
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000b1');
 select is((select count(*)::int from public.health_samples), 0, 'trainer B (no grants) sees no health samples');

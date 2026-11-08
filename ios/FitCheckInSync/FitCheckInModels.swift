@@ -12,6 +12,9 @@ enum FitCheckInCategory: String, Codable, CaseIterable, Identifiable {
     case activity
     case workouts
     case vo2Max = "vo2_max"
+    case vitals
+    case mobility
+    case body
 
     var id: String { rawValue }
 
@@ -25,6 +28,9 @@ enum FitCheckInCategory: String, Codable, CaseIterable, Identifiable {
         case .activity: "步数与能量 · Steps & energy"
         case .workouts: "体能训练 · Workouts"
         case .vo2Max: "最大摄氧量 · VO₂ max"
+        case .vitals: "血氧 / 呼吸 / 手腕温度 · Vitals"
+        case .mobility: "步行与行动能力 · Mobility"
+        case .body: "体重与体脂 · Body"
         }
     }
 
@@ -44,6 +50,24 @@ enum FitCheckInMetric: String, Codable {
     case exerciseTime = "exercise_time"
     case workout
     case vo2Max = "vo2_max"
+    case walkingHeartRate = "walking_heart_rate"
+    case heartRateRecovery = "heart_rate_recovery"
+    case distanceWalkingRunning = "distance_walking_running"
+    case distanceCycling = "distance_cycling"
+    case distanceSwimming = "distance_swimming"
+    case flightsClimbed = "flights_climbed"
+    case oxygenSaturation = "oxygen_saturation"
+    case respiratoryRate = "respiratory_rate"
+    case wristTemperature = "wrist_temperature"
+    case walkingSpeed = "walking_speed"
+    case walkingSteadiness = "walking_steadiness"
+    case walkingAsymmetry = "walking_asymmetry"
+    case walkingDoubleSupport = "walking_double_support"
+    case walkingStepLength = "walking_step_length"
+    case sixMinuteWalk = "six_minute_walk"
+    case bodyMass = "body_mass"
+    case bodyFat = "body_fat"
+    case leanBodyMass = "lean_body_mass"
 
     var unit: String {
         switch self {
@@ -54,6 +78,15 @@ enum FitCheckInMetric: String, Codable {
         case .activeEnergy, .basalEnergy: "kcal"
         case .exerciseTime, .workout: "min"
         case .vo2Max: "mL/kg/min"
+        case .walkingHeartRate, .heartRateRecovery: "bpm"
+        case .distanceWalkingRunning, .distanceCycling: "km"
+        case .distanceSwimming, .walkingStepLength, .sixMinuteWalk: "m"
+        case .flightsClimbed: "count"
+        case .oxygenSaturation, .walkingSteadiness, .walkingAsymmetry, .walkingDoubleSupport, .bodyFat: "%"
+        case .respiratoryRate: "breaths/min"
+        case .wristTemperature: "degC"
+        case .walkingSpeed: "m/s"
+        case .bodyMass, .leanBodyMass: "kg"
         }
     }
 }
@@ -82,6 +115,15 @@ struct HealthSampleUpload: Codable, Equatable {
         /// Apple Workout Effort (1–10, iOS 18+). User-rated preferred over Apple's estimate.
         /// Used by the server's session-RPE load model; heart rate under-reads strength work.
         var appleEffort: Double?
+        /// Running dynamics averaged over the workout (Apple Watch SE 2/S6+ with watchOS 9+).
+        var runningPowerW: Double?
+        var runningSpeedMS: Double?
+        var groundContactMS: Double?
+        var verticalOscillationCM: Double?
+        var strideLengthM: Double?
+        /// Cycling sensors (power meter / cadence sensor paired to the Watch, iOS 17+).
+        var cyclingPowerW: Double?
+        var cyclingCadenceRPM: Double?
     }
 }
 

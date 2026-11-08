@@ -4,6 +4,7 @@
  * for security.
  */
 import type { ReadinessAssessment } from '@shared/metrics/assessment.ts'
+import type { FitnessAssessment } from '@shared/metrics/fitness.ts'
 import { unwrap } from '@/hooks/useLiveQuery'
 import { supabase, type Enums, type Tables } from './supabase'
 
@@ -20,6 +21,7 @@ export type HealthSample = Tables<'health_samples'>
 export type SyncDevice = Tables<'health_sync_devices'>
 
 export interface StoredAssessment extends ReadinessAssessment {
+  fitness?: Partial<FitnessAssessment>
   latest?: Partial<Record<'hrv' | 'restingHeartRate' | 'vo2Max', { value: number; measuredAt: number }>>
   rawSummary?: {
     sleepHours: number | null
@@ -191,10 +193,14 @@ export const api = {
   },
 
   // ── health ──
+  /**
+   * Latest snapshot. For a trainer the server strips every section the client has not
+   * granted (client_health_snapshot RPC) — the full row is never sent.
+   */
   async latestSnapshot(userId: string): Promise<Snapshot | null> {
-    const res = await supabase.from('health_snapshots').select('*').eq('user_id', userId).order('snapshot_date', { ascending: false }).limit(1).maybeSingle()
+    const res = await supabase.rpc('client_health_snapshot', { p_client: userId })
     if (res.error) throw res.error
-    return res.data as unknown as Snapshot | null
+    return (res.data ?? null) as unknown as Snapshot | null
   },
   async healthSamples(userId: string, metrics: string[], sinceDays = 30): Promise<HealthSample[]> {
     const since = new Date(Date.now() - sinceDays * 86_400_000).toISOString()
@@ -232,7 +238,7 @@ export const api = {
   },
 
   // ── profile ──
-  async updateProfile(id: string, patch: Partial<Pick<Tables<'profiles'>, 'display_name' | 'locale' | 'time_zone' | 'bio'>>) {
+  async updateProfile(id: string, patch: Partial<Pick<Tables<'profiles'>, 'display_name' | 'locale' | 'time_zone' | 'bio' | 'birth_year' | 'sex'>>) {
     return unwrap(await supabase.from('profiles').update(patch).eq('id', id).select('*').single())
   },
   async peerProfile(id: string) {

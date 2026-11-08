@@ -4,7 +4,7 @@
  */
 
 import { addDays, fromLocal, localParts, startOfDay } from './metrics/calendar.ts'
-import type { MetricType } from './metrics/health-schema.ts'
+import { METRICS, type MetricType } from './metrics/health-schema.ts'
 
 export interface DemoSample {
   sample_id: string
@@ -33,18 +33,7 @@ function rng(seed: number) {
   }
 }
 
-const UNITS: Record<MetricType, string> = {
-  hrv_sdnn: 'ms',
-  resting_heart_rate: 'bpm',
-  heart_rate: 'bpm',
-  sleep_analysis: 'h',
-  step_count: 'count',
-  active_energy: 'kcal',
-  basal_energy: 'kcal',
-  exercise_time: 'min',
-  workout: 'min',
-  vo2_max: 'mL/kg/min',
-}
+const UNITS = Object.fromEntries(Object.entries(METRICS).map(([k, d]) => [k, d.unit])) as Record<MetricType, string>
 
 /** 30 days of plausible simulated data ending "now". */
 export function generateDemoSamples(nowMs: number, timeZone: string, seed = 42): DemoSample[] {
@@ -105,7 +94,7 @@ export function generateDemoSamples(nowMs: number, timeZone: string, seed = 42):
       push(`steps:${key}`, 'step_count', (6500 + r() * 6000) * dayFraction, at(0), endOfDay)
       push(`active:${key}`, 'active_energy', (380 + r() * 380) * dayFraction, at(0), endOfDay)
       push(`basal:${key}`, 'basal_energy', 1650 * dayFraction, at(0), endOfDay)
-      push(`exercise:${key}`, 'exercise_time', (18 + r() * 40) * dayFraction, at(0), endOfDay)
+      push(`exercise:${key}`, 'exercise_time', (12 + r() * 22) * dayFraction, at(0), endOfDay)
     }
     // Solo cardio on ~2 non-coach days per week (coach sessions are created by demo-session).
     const coachDay = (DEMO_COACH_DAY_OFFSETS as readonly number[]).includes(-i)
@@ -115,14 +104,50 @@ export function generateDemoSamples(nowMs: number, timeZone: string, seed = 42):
       const end = start + duration * 60_000
       if (end <= nowMs) {
         const avg = 140 + r() * 15
+        const speed = 3.1 + r() * 0.3 + (29 - i) * 0.004 // slowly getting faster (simulated)
         push(`workout:${key}`, 'workout', duration, start, end, 'running', {
           averageHeartRate: Math.round(avg),
           maxHeartRate: Math.round(avg * 1.15),
           energyKCal: Math.round(duration * 10),
+          distanceKM: Math.round(speed * duration * 0.06 * 10) / 10,
+          // Power tracks speed (≈ 80 W per m/s here); efficiency improves slightly over time.
+          runningPowerW: Math.round(speed * (82 - (29 - i) * 0.05) + (r() - 0.5) * 4),
+          runningSpeedMS: Math.round(speed * 100) / 100,
+          groundContactMS: Math.round(250 - (29 - i) * 0.3 + r() * 6),
+          verticalOscillationCM: Math.round((8.2 + r() * 0.8) * 10) / 10,
+          strideLengthM: Math.round((1.08 + r() * 0.06) * 100) / 100,
         })
+        push(`hrr:${key}`, 'heart_rate_recovery', 26 + (29 - i) * 0.08 + (r() - 0.5) * 4, end, end + 60_000)
       }
     }
-    if (i % 7 === 0 && at(9) <= nowMs) push(`vo2:${key}`, 'vo2_max', 44 + r() * 2, at(9), at(9))
+    // VO₂max: weekly, slowly improving (simulated) — 90 days handled by the loop below.
+    // Overnight vitals (Apple Watch Series 6+/8+): SpO₂, respiratory rate, wrist temp deviation.
+    if (at(6) <= nowMs) {
+      push(`spo2:${key}`, 'oxygen_saturation', 96.5 + r() * 1.8, at(3), at(3))
+      push(`resp:${key}`, 'respiratory_rate', 14 + r() * 1.2 + fatigue * 0.8, at(4), at(4))
+      push(`temp:${key}`, 'wrist_temperature', 34.6 + (r() - 0.5) * 0.3 + fatigue * 0.2, at(5), at(5))
+      push(`walkhr:${key}`, 'walking_heart_rate', 98 + r() * 6, at(12), at(12))
+    }
+    if (dayFraction > 0.05) {
+      push(`dist:${key}`, 'distance_walking_running', (4.5 + r() * 4) * dayFraction, at(0), endOfDay)
+      push(`flights:${key}`, 'flights_climbed', Math.round((6 + r() * 10) * dayFraction), at(0), endOfDay)
+    }
+    if (i % 3 === 0 && at(13) <= nowMs) {
+      push(`wspeed:${key}`, 'walking_speed', 1.28 + r() * 0.1, at(13), at(13))
+      push(`wsteady:${key}`, 'walking_steadiness', 88 + r() * 6, at(13), at(13))
+      push(`wasym:${key}`, 'walking_asymmetry', 2 + r() * 2, at(13), at(13))
+      push(`wdbl:${key}`, 'walking_double_support', 25 + r() * 3, at(13), at(13))
+      push(`wstep:${key}`, 'walking_step_length', 0.72 + r() * 0.05, at(13), at(13))
+    }
+    if (i % 4 === 0 && at(7) <= nowMs) {
+      push(`mass:${key}`, 'body_mass', 74.5 - (29 - i) * 0.03 + (r() - 0.5) * 0.4, at(7), at(7))
+      push(`fat:${key}`, 'body_fat', 18.5 - (29 - i) * 0.03 + (r() - 0.5) * 0.3, at(7), at(7))
+    }
+  }
+  // 13 weekly VO₂max estimates over 90 days, slowly improving (simulated).
+  for (let w = 12; w >= 0; w--) {
+    const t = addDays(today, -w * 7, timeZone) + 9 * 3_600_000
+    if (t <= nowMs) push(`vo2w:${w}`, 'vo2_max', 43.2 + (12 - w) * 0.12 + (r() - 0.5) * 0.4, t, t)
   }
   return out
 }

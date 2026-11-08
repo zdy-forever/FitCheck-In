@@ -17,6 +17,9 @@ export type HealthCategory =
   | 'activity'
   | 'workouts'
   | 'vo2_max'
+  | 'vitals'
+  | 'mobility'
+  | 'body'
 
 export const HEALTH_CATEGORIES: HealthCategory[] = [
   'scores',
@@ -27,6 +30,9 @@ export const HEALTH_CATEGORIES: HealthCategory[] = [
   'activity',
   'workouts',
   'vo2_max',
+  'vitals',
+  'mobility',
+  'body',
 ]
 
 export type MetricType =
@@ -40,6 +46,24 @@ export type MetricType =
   | 'exercise_time'
   | 'workout'
   | 'vo2_max'
+  | 'walking_heart_rate'
+  | 'heart_rate_recovery'
+  | 'distance_walking_running'
+  | 'distance_cycling'
+  | 'distance_swimming'
+  | 'flights_climbed'
+  | 'oxygen_saturation'
+  | 'respiratory_rate'
+  | 'wrist_temperature'
+  | 'walking_speed'
+  | 'walking_steadiness'
+  | 'walking_asymmetry'
+  | 'walking_double_support'
+  | 'walking_step_length'
+  | 'six_minute_walk'
+  | 'body_mass'
+  | 'body_fat'
+  | 'lean_body_mass'
 
 export interface MetricDefinition {
   category: HealthCategory
@@ -63,6 +87,24 @@ export const METRICS: Record<MetricType, MetricDefinition> = {
   exercise_time: { category: 'activity', unit: 'min', min: 0, max: 1_440, healthKit: 'HKQuantityTypeIdentifierAppleExerciseTime' },
   workout: { category: 'workouts', unit: 'min', min: 0, max: 1_440, healthKit: 'HKWorkoutType' },
   vo2_max: { category: 'vo2_max', unit: 'mL/kg/min', min: 5, max: 100, healthKit: 'HKQuantityTypeIdentifierVO2Max' },
+  walking_heart_rate: { category: 'heart_rate', unit: 'bpm', min: 30, max: 200, healthKit: 'HKQuantityTypeIdentifierWalkingHeartRateAverage' },
+  heart_rate_recovery: { category: 'heart_rate', unit: 'bpm', min: 1, max: 100, healthKit: 'HKQuantityTypeIdentifierHeartRateRecoveryOneMinute' },
+  distance_walking_running: { category: 'activity', unit: 'km', min: 0, max: 300, healthKit: 'HKQuantityTypeIdentifierDistanceWalkingRunning' },
+  distance_cycling: { category: 'activity', unit: 'km', min: 0, max: 1000, healthKit: 'HKQuantityTypeIdentifierDistanceCycling' },
+  distance_swimming: { category: 'activity', unit: 'm', min: 0, max: 50_000, healthKit: 'HKQuantityTypeIdentifierDistanceSwimming' },
+  flights_climbed: { category: 'activity', unit: 'count', min: 0, max: 2_000, healthKit: 'HKQuantityTypeIdentifierFlightsClimbed' },
+  oxygen_saturation: { category: 'vitals', unit: '%', min: 50, max: 100, healthKit: 'HKQuantityTypeIdentifierOxygenSaturation' },
+  respiratory_rate: { category: 'vitals', unit: 'breaths/min', min: 4, max: 60, healthKit: 'HKQuantityTypeIdentifierRespiratoryRate' },
+  wrist_temperature: { category: 'vitals', unit: 'degC', min: 25, max: 45, healthKit: 'HKQuantityTypeIdentifierAppleSleepingWristTemperature' },
+  walking_speed: { category: 'mobility', unit: 'm/s', min: 0.1, max: 4, healthKit: 'HKQuantityTypeIdentifierWalkingSpeed' },
+  walking_steadiness: { category: 'mobility', unit: '%', min: 0, max: 100, healthKit: 'HKQuantityTypeIdentifierAppleWalkingSteadiness' },
+  walking_asymmetry: { category: 'mobility', unit: '%', min: 0, max: 100, healthKit: 'HKQuantityTypeIdentifierWalkingAsymmetryPercentage' },
+  walking_double_support: { category: 'mobility', unit: '%', min: 0, max: 100, healthKit: 'HKQuantityTypeIdentifierWalkingDoubleSupportPercentage' },
+  walking_step_length: { category: 'mobility', unit: 'm', min: 0.1, max: 2, healthKit: 'HKQuantityTypeIdentifierWalkingStepLength' },
+  six_minute_walk: { category: 'mobility', unit: 'm', min: 50, max: 1_200, healthKit: 'HKQuantityTypeIdentifierSixMinuteWalkTestDistance' },
+  body_mass: { category: 'body', unit: 'kg', min: 20, max: 400, healthKit: 'HKQuantityTypeIdentifierBodyMass' },
+  body_fat: { category: 'body', unit: '%', min: 2, max: 75, healthKit: 'HKQuantityTypeIdentifierBodyFatPercentage' },
+  lean_body_mass: { category: 'body', unit: 'kg', min: 10, max: 200, healthKit: 'HKQuantityTypeIdentifierLeanBodyMass' },
 }
 
 export const SLEEP_STAGES = ['inBed', 'awake', 'asleepCore', 'asleepDeep', 'asleepREM', 'asleepUnspecified'] as const
@@ -84,9 +126,41 @@ export interface HealthSampleUpload {
   /** Sleep stage (sleep_analysis) or workout kind (workout). */
   category?: string
   /** Small, whitelisted metadata (workout avg/max HR, kcal, distance). */
-  metadata?: { averageHeartRate?: number; maxHeartRate?: number; energyKCal?: number; distanceKM?: number; appleEffort?: number }
+  metadata?: WorkoutMetadata
   sourceName?: string
   sourceBundle?: string
+}
+
+/** Per-workout averages; running/cycling fields only for those workout kinds. */
+export interface WorkoutMetadata {
+  averageHeartRate?: number
+  maxHeartRate?: number
+  energyKCal?: number
+  distanceKM?: number
+  appleEffort?: number
+  runningPowerW?: number
+  runningSpeedMS?: number
+  groundContactMS?: number
+  verticalOscillationCM?: number
+  strideLengthM?: number
+  cyclingPowerW?: number
+  cyclingCadenceRPM?: number
+}
+
+/** Allowed metadata keys with plausibility ranges (rejected, never clamped). */
+export const WORKOUT_METADATA_RANGES: Record<keyof WorkoutMetadata, [number, number]> = {
+  averageHeartRate: [30, 250],
+  maxHeartRate: [30, 250],
+  energyKCal: [0, 20_000],
+  distanceKM: [0, 1_000],
+  appleEffort: [1, 10],
+  runningPowerW: [10, 1_500],
+  runningSpeedMS: [0.5, 12],
+  groundContactMS: [100, 500],
+  verticalOscillationCM: [2, 25],
+  strideLengthM: [0.3, 3],
+  cyclingPowerW: [10, 2_500],
+  cyclingCadenceRPM: [10, 250],
 }
 
 export interface HealthUploadRequest {
@@ -156,11 +230,11 @@ export function validateSample(
     if (typeof o.metadata !== 'object') return fail('invalid_metadata')
     const m = o.metadata as Record<string, unknown>
     metadata = {}
-    for (const key of ['averageHeartRate', 'maxHeartRate', 'energyKCal', 'distanceKM', 'appleEffort'] as const) {
+    for (const key of Object.keys(WORKOUT_METADATA_RANGES) as Array<keyof WorkoutMetadata>) {
       const v = m[key]
       if (v === undefined || v === null) continue
-      if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 100_000) return fail('invalid_metadata')
-      if (key === 'appleEffort' && (v < 1 || v > 10)) return fail('invalid_metadata')
+      const [lo, hi] = WORKOUT_METADATA_RANGES[key]
+      if (typeof v !== 'number' || !Number.isFinite(v) || v < lo || v > hi) return fail('invalid_metadata')
       metadata[key] = v
     }
   }

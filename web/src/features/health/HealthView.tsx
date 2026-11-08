@@ -6,9 +6,10 @@ import { CardSkeleton } from '@/components/ui/Skeleton'
 import { useLiveQuery } from '@/hooks/useLiveQuery'
 import { api, type HealthCategory } from '@/lib/api'
 import { useFormatters } from '@/lib/format'
+import { FitnessPanel } from './FitnessPanel'
 import { dailySeries, HealthSummary, TrendChart } from './HealthPanels'
 
-const ALL: HealthCategory[] = ['scores', 'hrv', 'resting_heart_rate', 'heart_rate', 'sleep', 'activity', 'workouts', 'vo2_max']
+const ALL: HealthCategory[] = ['scores', 'hrv', 'resting_heart_rate', 'heart_rate', 'sleep', 'activity', 'workouts', 'vo2_max', 'vitals', 'mobility', 'body']
 
 /**
  * Health view for a user. For trainers, `viewerTrainerId` is set and only categories
@@ -46,6 +47,7 @@ export function HealthView({ userId, timeZone, viewerTrainerId, lastSyncAt }: { 
   return (
     <div className="flex flex-col gap-4">
       <HealthSummary snapshot={snapshot} shared={shared} lastSyncAt={syncAt} isOwner={isOwner} />
+      {snapshot?.assessment.fitness && <FitnessPanel snapshot={snapshot} shared={shared} />}
       {snapshot && (
         <div className="grid gap-4 lg:grid-cols-3">
           {shared.has('hrv') && <TrendChart testId="trend-hrv" title={t('health.trendHrv')} data={dailySeries(samples, 'hrv_sdnn', timeZone)} unit={t('health.units.ms')} color="var(--series-1)" baseline={base?.hrv} />}

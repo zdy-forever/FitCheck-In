@@ -17,7 +17,7 @@ import { api, type HealthCategory } from '@/lib/api'
 import { errorKey } from '@/lib/errors'
 import { useFormatters } from '@/lib/format'
 
-export const CATEGORIES: HealthCategory[] = ['scores', 'hrv', 'resting_heart_rate', 'sleep', 'heart_rate', 'activity', 'workouts', 'vo2_max']
+export const CATEGORIES: HealthCategory[] = ['scores', 'hrv', 'resting_heart_rate', 'sleep', 'heart_rate', 'activity', 'workouts', 'vo2_max', 'vitals', 'mobility', 'body']
 
 function Toggle({ checked, onChange, label, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
   return (
@@ -166,6 +166,9 @@ export function SettingsPage() {
   const [bio, setBio] = useState(me.bio ?? '')
   const [tz, setTz] = useState(me.time_zone)
   const [lang, setLang] = useState<Language>(normalizeLanguage(me.locale))
+  const [birthYear, setBirthYear] = useState(me.birth_year ? String(me.birth_year) : '')
+  const [sex, setSex] = useState<string>(me.sex ?? '')
+  const [birthYearError, setBirthYearError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [nameError, setNameError] = useState<string | null>(null)
   const zones = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone') ?? [me.time_zone]
@@ -187,9 +190,16 @@ export function SettingsPage() {
       return
     }
     setNameError(null)
+    const thisYear = new Date().getFullYear()
+    const by = birthYear.trim() === '' ? null : Number(birthYear)
+    if (by !== null && (!Number.isInteger(by) || by < thisYear - 110 || by > thisYear - 10)) {
+      setBirthYearError(t('validation.range', { min: thisYear - 110, max: thisYear - 10 }))
+      return
+    }
+    setBirthYearError(null)
     setSaving(true)
     try {
-      await api.updateProfile(me.id, { display_name: name.trim(), bio: bio.trim() || null, time_zone: tz, locale: lang })
+      await api.updateProfile(me.id, { display_name: name.trim(), bio: bio.trim() || null, time_zone: tz, locale: lang, ...(me.role === 'client' ? { birth_year: by, sex: sex === 'female' || sex === 'male' ? sex : null } : {}) })
       await i18n.changeLanguage(lang)
       await refreshProfile()
       toast.success(t('settings.saved'))
@@ -237,6 +247,17 @@ export function SettingsPage() {
                 </option>
               ))}
             </SelectField>
+            {me.role === 'client' && (
+              <>
+                <TextField label={t('settings.birthYear')} inputMode="numeric" value={birthYear} onChange={(e) => setBirthYear(e.target.value.replace(/\D/g, '').slice(0, 4))} error={birthYearError} optionalLabel={t('common.optional')} />
+                <SelectField label={t('settings.sex')} value={sex} onChange={(e) => setSex(e.target.value)} optionalLabel={t('common.optional')}>
+                  <option value="">{t('settings.sexUnset')}</option>
+                  <option value="female">{t('settings.sexFemale')}</option>
+                  <option value="male">{t('settings.sexMale')}</option>
+                </SelectField>
+                <p className="-mt-2 text-xs text-ink-3 sm:col-span-2">{t('settings.normsHint')}</p>
+              </>
+            )}
             <TextArea label={t('settings.bio')} value={bio} onChange={(e) => setBio(e.target.value)} maxLength={500} className="sm:col-span-2" optionalLabel={t('common.optional')} />
             <div className="sm:col-span-2">
               <Button type="submit" loading={saving}>

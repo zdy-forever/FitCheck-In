@@ -29,7 +29,7 @@ export interface StoredSample {
   /** epoch ms */
   measuredAt: number
   category?: string | null
-  metadata?: { averageHeartRate?: number; maxHeartRate?: number; energyKCal?: number; distanceKM?: number; appleEffort?: number } | null
+  metadata?: import('./health-schema.ts').WorkoutMetadata | null
 }
 
 export interface AggregateResult {

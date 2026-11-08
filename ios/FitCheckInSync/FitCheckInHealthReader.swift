@@ -38,6 +38,18 @@ struct FitCheckInHealthReader {
         if categories.contains(.vo2Max) { q(.vo2Max) }
         if categories.contains(.activity) { q(.stepCount); q(.activeEnergyBurned); q(.basalEnergyBurned); q(.appleExerciseTime) }
         if categories.contains(.sleep), let s = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) { types.insert(s) }
+        if categories.contains(.heartRate) { q(.walkingHeartRateAverage); q(.heartRateRecoveryOneMinute) }
+        if categories.contains(.activity) { q(.distanceWalkingRunning); q(.distanceCycling); q(.distanceSwimming); q(.flightsClimbed) }
+        if categories.contains(.vitals) { q(.oxygenSaturation); q(.respiratoryRate); q(.appleSleepingWristTemperature) }
+        if categories.contains(.mobility) {
+            q(.walkingSpeed); q(.appleWalkingSteadiness); q(.walkingAsymmetryPercentage)
+            q(.walkingDoubleSupportPercentage); q(.walkingStepLength); q(.sixMinuteWalkTestDistance)
+        }
+        if categories.contains(.body) { q(.bodyMass); q(.bodyFatPercentage); q(.leanBodyMass) }
+        if categories.contains(.workouts) {
+            q(.runningPower); q(.runningSpeed); q(.runningGroundContactTime); q(.runningVerticalOscillation); q(.runningStrideLength)
+            q(.cyclingPower); q(.cyclingCadence)
+        }
         if categories.contains(.workouts) {
             types.insert(HKObjectType.workoutType())
             q(.heartRate)
@@ -65,28 +77,48 @@ struct FitCheckInHealthReader {
     /// Reads new samples for the enabled categories. `fullResync` ignores stored anchors
     /// (used after the user deletes server data). Anchors are only committed after a
     /// successful upload via `commit(_:)`.
-    func readNewSamples(categories: Set<FitCheckInCategory>, lookbackDays: Int = 30, fullResync: Bool = false) async throws -> ReadResult {
+    func readNewSamples(categories: Set<FitCheckInCategory>, lookbackDays: Int = 90, fullResync: Bool = false) async throws -> ReadResult {
         let start = calendar.date(byAdding: .day, value: -lookbackDays, to: Date()) ?? Date().addingTimeInterval(-Double(lookbackDays) * 86_400)
         var samples: [HealthSampleUpload] = []
         var pendingAnchors: [String: HKQueryAnchor] = [:]
 
-        func anchored(_ type: HKSampleType, key: String) async throws -> [HKSample] {
+        func anchored(_ type: HKSampleType, key: String, since: Date? = nil) async throws -> [HKSample] {
             let anchor = fullResync ? nil : loadAnchor(key)
-            let (newSamples, newAnchor) = try await anchoredQuery(type: type, since: start, anchor: anchor)
+            let (newSamples, newAnchor) = try await anchoredQuery(type: type, since: since ?? start, anchor: anchor)
             if let newAnchor { pendingAnchors[key] = newAnchor }
             return newSamples
         }
 
         let bpm = HKUnit.count().unitDivided(by: .minute())
-        let quantityMetrics: [(FitCheckInCategory, HKQuantityTypeIdentifier, FitCheckInMetric, HKUnit)] = [
-            (.hrv, .heartRateVariabilitySDNN, .hrvSDNN, .secondUnit(with: .milli)),
-            (.restingHeartRate, .restingHeartRate, .restingHeartRate, bpm),
-            (.vo2Max, .vo2Max, .vo2Max, HKUnit.literUnit(with: .milli).unitDivided(by: HKUnit.gramUnit(with: .kilo).unitMultiplied(by: .minute()))),
+        let mps = HKUnit.meter().unitDivided(by: .second())
+        // (category, HealthKit type, metric, unit, multiplier). Percent types are stored by
+        // HealthKit as 0–1 fractions; ×100 like HealthKitService.fetchRawHealthData.
+        let quantityMetrics: [(FitCheckInCategory, HKQuantityTypeIdentifier, FitCheckInMetric, HKUnit, Double)] = [
+            (.hrv, .heartRateVariabilitySDNN, .hrvSDNN, .secondUnit(with: .milli), 1),
+            (.restingHeartRate, .restingHeartRate, .restingHeartRate, bpm, 1),
+            (.vo2Max, .vo2Max, .vo2Max, HKUnit.literUnit(with: .milli).unitDivided(by: HKUnit.gramUnit(with: .kilo).unitMultiplied(by: .minute())), 1),
+            (.heartRate, .walkingHeartRateAverage, .walkingHeartRate, bpm, 1),
+            (.heartRate, .heartRateRecoveryOneMinute, .heartRateRecovery, bpm, 1),
+            (.vitals, .oxygenSaturation, .oxygenSaturation, .percent(), 100),
+            (.vitals, .respiratoryRate, .respiratoryRate, bpm, 1),
+            (.vitals, .appleSleepingWristTemperature, .wristTemperature, .degreeCelsius(), 1),
+            (.mobility, .walkingSpeed, .walkingSpeed, mps, 1),
+            (.mobility, .appleWalkingSteadiness, .walkingSteadiness, .percent(), 100),
+            (.mobility, .walkingAsymmetryPercentage, .walkingAsymmetry, .percent(), 100),
+            (.mobility, .walkingDoubleSupportPercentage, .walkingDoubleSupport, .percent(), 100),
+            (.mobility, .walkingStepLength, .walkingStepLength, .meter(), 1),
+            (.mobility, .sixMinuteWalkTestDistance, .sixMinuteWalk, .meter(), 1),
+            (.body, .bodyMass, .bodyMass, .gramUnit(with: .kilo), 1),
+            (.body, .bodyFatPercentage, .bodyFat, .percent(), 100),
+            (.body, .leanBodyMass, .leanBodyMass, .gramUnit(with: .kilo), 1),
         ]
-        for (category, identifier, metric, unit) in quantityMetrics where categories.contains(category) {
+        for (category, identifier, metric, unit, multiplier) in quantityMetrics where categories.contains(category) {
             guard let type = HKObjectType.quantityType(forIdentifier: identifier) else { continue }
-            for case let s as HKQuantitySample in try await anchored(type, key: metric.rawValue) {
-                samples.append(upload(s, metric: metric, value: s.quantity.doubleValue(for: unit)))
+            // Slow-moving metrics: look back 90 days on first sync (trends); others use lookbackDays.
+            let slow: Set<FitCheckInMetric> = [.vo2Max, .heartRateRecovery, .bodyMass, .bodyFat, .leanBodyMass, .walkingSpeed, .walkingSteadiness, .walkingAsymmetry, .walkingDoubleSupport, .walkingStepLength, .sixMinuteWalk]
+            let since = slow.contains(metric) ? max(start, Date().addingTimeInterval(-90 * 86_400)) : start
+            for case let s as HKQuantitySample in try await anchored(type, key: metric.rawValue, since: since) {
+                samples.append(upload(s, metric: metric, value: s.quantity.doubleValue(for: unit) * multiplier))
             }
         }
 
@@ -108,8 +140,20 @@ struct FitCheckInHealthReader {
                 let kcal = w.statistics(for: HKQuantityType(.activeEnergyBurned))?.sumQuantity()?.doubleValue(for: .kilocalorie())
                 let km = w.totalDistance?.doubleValue(for: .meterUnit(with: .kilo))
                 let effort = await workoutEffort(start: w.startDate, end: w.endDate)
-                var item = upload(w, metric: .workout, value: w.duration / 60, category: Self.workoutKind(for: w.workoutActivityType).rawValue)
-                item.metadata = .init(averageHeartRate: hr.average, maxHeartRate: hr.maximum, energyKCal: kcal, distanceKM: km, appleEffort: effort)
+                let kind = Self.workoutKind(for: w.workoutActivityType)
+                var item = upload(w, metric: .workout, value: w.duration / 60, category: kind.rawValue)
+                var meta = HealthSampleUpload.WorkoutMetadata(averageHeartRate: hr.average, maxHeartRate: hr.maximum, energyKCal: kcal, distanceKM: km, appleEffort: effort)
+                if kind == .running {
+                    meta.runningPowerW = await averageDuring(.runningPower, unit: .watt(), start: w.startDate, end: w.endDate)
+                    meta.runningSpeedMS = await averageDuring(.runningSpeed, unit: HKUnit.meter().unitDivided(by: .second()), start: w.startDate, end: w.endDate)
+                    meta.groundContactMS = await averageDuring(.runningGroundContactTime, unit: .secondUnit(with: .milli), start: w.startDate, end: w.endDate)
+                    meta.verticalOscillationCM = await averageDuring(.runningVerticalOscillation, unit: .meterUnit(with: .centi), start: w.startDate, end: w.endDate)
+                    meta.strideLengthM = await averageDuring(.runningStrideLength, unit: .meter(), start: w.startDate, end: w.endDate)
+                } else if kind == .cycling {
+                    meta.cyclingPowerW = await averageDuring(.cyclingPower, unit: .watt(), start: w.startDate, end: w.endDate)
+                    meta.cyclingCadenceRPM = await averageDuring(.cyclingCadence, unit: HKUnit.count().unitDivided(by: .minute()), start: w.startDate, end: w.endDate)
+                }
+                item.metadata = meta
                 samples.append(item)
             }
         }
@@ -120,6 +164,10 @@ struct FitCheckInHealthReader {
             samples += try await dailySums(.activeEnergyBurned, unit: .kilocalorie(), metric: .activeEnergy, start: dayStart)
             samples += try await dailySums(.basalEnergyBurned, unit: .kilocalorie(), metric: .basalEnergy, start: dayStart)
             samples += try await dailySums(.appleExerciseTime, unit: .minute(), metric: .exerciseTime, start: dayStart)
+            samples += try await dailySums(.distanceWalkingRunning, unit: .meterUnit(with: .kilo), metric: .distanceWalkingRunning, start: dayStart)
+            samples += try await dailySums(.distanceCycling, unit: .meterUnit(with: .kilo), metric: .distanceCycling, start: dayStart)
+            samples += try await dailySums(.distanceSwimming, unit: .meter(), metric: .distanceSwimming, start: dayStart)
+            samples += try await dailySums(.flightsClimbed, unit: .count(), metric: .flightsClimbed, start: dayStart)
         }
 
         return ReadResult(samples: samples, pendingAnchors: pendingAnchors)
@@ -278,6 +326,17 @@ struct FitCheckInHealthReader {
             if let value, (1...10).contains(value) { return value }
         }
         return nil
+    }
+
+    /// Discrete average of a quantity type during a workout (running/cycling dynamics).
+    private func averageDuring(_ identifier: HKQuantityTypeIdentifier, unit: HKUnit, start: Date, end: Date) async -> Double? {
+        guard let type = HKObjectType.quantityType(forIdentifier: identifier) else { return nil }
+        return await withCheckedContinuation { cont in
+            let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: HKQuery.predicateForSamples(withStart: start, end: end), options: .discreteAverage) { _, result, _ in
+                cont.resume(returning: result?.averageQuantity()?.doubleValue(for: unit))
+            }
+            store.execute(query)
+        }
     }
 
     /// Same statistics query as `HealthKitService.fetchHeartRateStats`.

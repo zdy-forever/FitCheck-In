@@ -151,6 +151,34 @@ RPE source, best first (each session stores which one was used and the UI shows 
 Tests: `web/tests/metrics/training-load.test.ts` (11 cases) and the live integration test
 "session-RPE training load end-to-end".
 
+## 4c. Fitness & health scores (`fitcheck-fitness@1.0.0`)
+
+Implementation: `supabase/functions/_shared/metrics/fitness.ts` (tests:
+`web/tests/metrics/fitness.test.ts`). Every card returns `null` / "No data yet" when its
+inputs are missing; nothing is filled with defaults.
+
+| Score | Inputs (Apple Health) | Method | Notes |
+|---|---|---|---|
+| **Cardio fitness** | VO₂ max (90 days) + optional birth year & sex | Percentile vs ACSM GETP 11th ed. age/sex reference values; 90-day trend | Without birth year & sex: value + trend only, no comparison. Apple's VO₂ max is itself an estimate. |
+| **Overnight vitals** | SpO₂, respiratory rate, sleeping wrist temperature | Deviation from own 28-day range (mean ± max(2 SD, floor)); SpO₂ < 95 % always flagged | 100 − 30 per flag. A flag means "ask the client", not a diagnosis. Needs Series 6+/8+ and region support. |
+| **Heart-rate recovery** | 1-minute HRR after workouts | 28-day average; ≤ 12 bpm low (Cole et al., NEJM 1999) | Score 12 bpm → 30, 25 → 70, 40 → 100. |
+| **Weekly activity** | Exercise minutes, steps, flights, distances, session RPE | WHO 2020: 150–300 min/week, vigorous (RPE ≥ 7) counts double | 70 % minutes (300 min = 100) + 30 % steps (10 000/day = 100). |
+| **Monotony & strain** | Session-RPE loads (4b) | Foster 1998: monotony = mean / SD of daily load (7 days); strain = weekly load × monotony | > 2 = high (every day similar). Needs ≥ 2 training days. |
+| **Running form** | Running power, speed, ground contact, vertical oscillation, stride (per run) | Economy = speed per 100 W vs own recent runs; vertical ratio | Change reported only if larger than 2 SD of run-to-run variation. |
+| **Walking & mobility** | Walking speed, steadiness, asymmetry, double support, step length, 6-min walk | health+ `scoreMobility` reused unchanged (test asserts equality with the golden-tested port) | Steadiness class per Apple: OK ≥ 40 %, Low 20–40 %, Very low < 20 %. |
+| **Body** | Weight, body fat, lean mass | 28-day change only | Deliberately not scored. |
+
+**Trends are noise-aware.** `trendPer30d` needs ≥ 4 points over ≥ 21 days and a slope
+with |t| ≥ 2; otherwise no direction is shown. (Without this, random scatter in
+heart-rate recovery produced a fake "−6.9 bpm per month" during development.)
+
+**Privacy.** Trainers no longer read `health_snapshots` directly. The
+`client_health_snapshot()` function returns only the sections for categories the client
+granted (scores, HRV, resting HR, sleep, activity, workouts, VO₂ max, heart rate,
+vitals, mobility, body) and never the raw per-signal data. This fixed an issue where a
+trainer granted only "readiness estimates" could read raw HRV/sleep values from the
+snapshot JSON via the API. Enforced and tested in pgTAP and integration tests.
+
 ## 5. The sufficiency layer
 
 The original engine **always returns a number**: missing inputs are replaced by neutral

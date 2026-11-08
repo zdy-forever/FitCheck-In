@@ -187,14 +187,14 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "bio": string | null,"created_at": string,"display_name": string,"id": string,"is_demo": boolean,"locale": string,"role": Database["public"]['Enums']["user_role"],"time_zone": string,"updated_at": string
+                    "bio": string | null,"birth_year": number | null,"created_at": string,"display_name": string,"id": string,"is_demo": boolean,"locale": string,"role": Database["public"]['Enums']["user_role"],"sex": string | null,"time_zone": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "bio"?: string | null,"created_at"?: string,"display_name": string,"id": string,"is_demo"?: boolean,"locale"?: string,"role": Database["public"]['Enums']["user_role"],"time_zone"?: string,"updated_at"?: string
+                    "bio"?: string | null,"birth_year"?: number | null,"created_at"?: string,"display_name": string,"id": string,"is_demo"?: boolean,"locale"?: string,"role": Database["public"]['Enums']["user_role"],"sex"?: string | null,"time_zone"?: string,"updated_at"?: string
                   }
                   Update: {
-                    "bio"?: string | null,"created_at"?: string,"display_name"?: string,"id"?: string,"is_demo"?: boolean,"locale"?: string,"role"?: Database["public"]['Enums']["user_role"],"time_zone"?: string,"updated_at"?: string
+                    "bio"?: string | null,"birth_year"?: number | null,"created_at"?: string,"display_name"?: string,"id"?: string,"is_demo"?: boolean,"locale"?: string,"role"?: Database["public"]['Enums']["user_role"],"sex"?: string | null,"time_zone"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     
@@ -353,6 +353,9 @@ isOneToOne: false
 "can_view_health":
 { Args: { "p_category": Database["public"]['Enums']["health_category"],"p_client": string }; Returns: boolean
                            },
+"client_health_snapshot":
+{ Args: { "p_client": string }; Returns: Json
+                           },
 "delete_my_account":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
@@ -398,7 +401,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "data_origin": "healthkit"|"demo","health_category": "scores"|"hrv"|"resting_heart_rate"|"heart_rate"|"sleep"|"activity"|"workouts"|"vo2_max","invitation_status": "pending"|"accepted"|"revoked","note_visibility": "private"|"shared","relationship_status": "active"|"ended","session_status": "planned"|"completed"|"cancelled","user_role": "trainer"|"client"
+            "data_origin": "healthkit"|"demo","health_category": "scores"|"hrv"|"resting_heart_rate"|"heart_rate"|"sleep"|"activity"|"workouts"|"vo2_max"|"vitals"|"mobility"|"body","invitation_status": "pending"|"accepted"|"revoked","note_visibility": "private"|"shared","relationship_status": "active"|"ended","session_status": "planned"|"completed"|"cancelled","user_role": "trainer"|"client"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -518,7 +521,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "data_origin": ["healthkit", "demo"],"health_category": ["scores", "hrv", "resting_heart_rate", "heart_rate", "sleep", "activity", "workouts", "vo2_max"],"invitation_status": ["pending", "accepted", "revoked"],"note_visibility": ["private", "shared"],"relationship_status": ["active", "ended"],"session_status": ["planned", "completed", "cancelled"],"user_role": ["trainer", "client"]
+            "data_origin": ["healthkit", "demo"],"health_category": ["scores", "hrv", "resting_heart_rate", "heart_rate", "sleep", "activity", "workouts", "vo2_max", "vitals", "mobility", "body"],"invitation_status": ["pending", "accepted", "revoked"],"note_visibility": ["private", "shared"],"relationship_status": ["active", "ended"],"session_status": ["planned", "completed", "cancelled"],"user_role": ["trainer", "client"]
           }
         }
 } as const

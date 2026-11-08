@@ -4,6 +4,7 @@ import { aggregateForEngine, type StoredSample } from './metrics/aggregate.ts'
 import { ALGORITHM_VERSION, assessReadiness } from './metrics/assessment.ts'
 import { localDateKey } from './metrics/calendar.ts'
 import { computeTrainingLoad, type PlatformSession } from './metrics/training-load.ts'
+import { computeFitness } from './metrics/fitness.ts'
 
 export async function recomputeSnapshot(
   admin: SupabaseClient,
@@ -72,6 +73,28 @@ export async function recomputeSnapshot(
 
   const assessment = assessReadiness(agg.input, { nowMs, timeZone }, agg.sampleTimes, undefined, { history: agg.history, trainingLoad, checkin })
 
+  // Slow-moving fitness metrics need a 90-day window (VO₂max / HRR trends) — separate lean query.
+  const slowMetrics = ['vo2_max', 'heart_rate_recovery', 'body_mass', 'body_fat', 'lean_body_mass', 'walking_speed', 'walking_steadiness', 'walking_asymmetry', 'walking_double_support', 'walking_step_length', 'six_minute_walk']
+  const { data: slow } = await admin
+    .from('health_samples')
+    .select('metric_type, value, start_at, measured_at')
+    .eq('user_id', userId)
+    .in('metric_type', slowMetrics)
+    .gte('measured_at', new Date(nowMs - 90 * 86_400_000).toISOString())
+    .limit(5_000)
+  const { data: prof } = await admin.from('profiles').select('birth_year, sex').eq('id', userId).single()
+  const fitnessSamples = [
+    ...samples.filter((s) => !slowMetrics.includes(s.metricType)).map((s) => ({ metricType: s.metricType, value: s.value, startAt: s.startAt, measuredAt: s.measuredAt, category: s.category, metadata: s.metadata as Record<string, number> | null })),
+    ...(slow ?? []).map((r) => ({ metricType: r.metric_type, value: r.value, startAt: Date.parse(r.start_at), measuredAt: Date.parse(r.measured_at) })),
+  ]
+  const fitness = computeFitness({
+    samples: fitnessSamples,
+    loadSessions: trainingLoad.sessions.map((s) => ({ startMs: s.startMs, load: s.load, rpe: s.rpe, durationMinutes: s.durationMinutes })),
+    profile: { birthYear: prof?.birth_year, sex: (prof?.sex as 'female' | 'male' | null) ?? null },
+    nowMs,
+    dayKey: (t) => localDateKey(t, timeZone),
+  })
+
   const { error: upErr } = await admin.from('health_snapshots').upsert(
     {
       user_id: userId,
@@ -80,7 +103,7 @@ export async function recomputeSnapshot(
       computed_at: new Date(nowMs).toISOString(),
       algorithm_version: ALGORITHM_VERSION,
       completeness: assessment.completeness,
-      assessment: { ...assessment, latest: agg.latest, rawSummary: summarizeRaw(agg) },
+      assessment: { ...assessment, fitness, latest: agg.latest, rawSummary: summarizeRaw(agg) },
       origin,
     },
     { onConflict: 'user_id,snapshot_date' },

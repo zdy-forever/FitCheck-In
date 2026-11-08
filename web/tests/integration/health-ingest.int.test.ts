@@ -163,14 +163,14 @@ describe.skipIf(!ANON)('health-ingest Edge Function (live local stack)', () => {
 
     const { data: visible } = await tc.from('health_samples').select('metric_type').eq('user_id', client.userId)
     expect(new Set(visible!.map((v) => v.metric_type))).toEqual(new Set(['hrv_sdnn']))
-    const { data: snaps } = await tc.from('health_snapshots').select('id').eq('user_id', client.userId)
-    expect(snaps).toHaveLength(1)
+    const { data: snap } = await tc.rpc('client_health_snapshot', { p_client: client.userId })
+    expect(snap).not.toBeNull()
 
     await cc.from('health_sharing_permissions').update({ granted: false }).eq('trainer_id', trainer.userId)
     const { data: after } = await tc.from('health_samples').select('metric_type').eq('user_id', client.userId)
     expect(after).toEqual([])
-    const { data: snapsAfter } = await tc.from('health_snapshots').select('id').eq('user_id', client.userId)
-    expect(snapsAfter).toEqual([])
+    const { data: snapAfter } = await tc.rpc('client_health_snapshot', { p_client: client.userId })
+    expect(snapAfter).toBeNull()
   })
 
   it('client can delete all stored health data', async () => {
@@ -203,8 +203,9 @@ describe.skipIf(!ANON)('demo-session Edge Function', () => {
     expect(error).toBeNull()
     const { data: overview } = await c.rpc('trainer_client_overview')
     expect(overview).toHaveLength(1)
-    const { data: snap } = await c.from('health_snapshots').select('origin, assessment').single()
-    expect(snap!.origin).toBe('demo')
+    const { data: overviewRows } = await c.rpc('trainer_client_overview')
+    const { data: snap } = await c.rpc('client_health_snapshot', { p_client: (overviewRows as { client_id: string }[])[0]!.client_id })
+    expect((snap as { origin: string }).origin).toBe('demo')
     const { data: samples } = await c.from('health_samples').select('origin').limit(5)
     expect(samples!.every((s) => s.origin === 'demo')).toBe(true)
   })
@@ -241,7 +242,7 @@ describe.skipIf(!ANON)('Swift-encoded upload (bytes produced by the iOS models)'
     const c = await signUp('client')
     const r = await ingest(c.token, raw)
     expect(r.status).toBe(200)
-    expect(r.body.accepted).toBe(3)
+    expect(r.body.accepted).toBe(raw.samples.length)
     expect(r.body.rejected).toEqual([])
   })
 })
@@ -313,9 +314,85 @@ describe.skipIf(!ANON)('session-RPE training load end-to-end', () => {
     expect(ok.status).toBe(200)
     expect(Object.keys(await ok.json()).sort()).toEqual(['completeness', 'date']) // status only, no health data
 
-    const { data } = await tc.from('health_snapshots').select('assessment').eq('user_id', c.userId).single()
+    const { data } = await tc.rpc('client_health_snapshot', { p_client: c.userId })
     const training = (data as { assessment: { training: { load7Day: number; sessions: { rpe: number; rpeSource: string; load: number; modality: string }[] } } }).assessment.training
     expect(training.load7Day).toBe(480)
     expect(training.sessions[0]).toMatchObject({ rpe: 8, rpeSource: 'client_rpe', load: 480, modality: 'resistance' })
+  })
+})
+
+describe.skipIf(!ANON)('extra Apple Health data + fitness scores', () => {
+  it('server catalogue matches the database for every metric (unit + category)', async () => {
+    const { METRICS } = await import('@shared/metrics/health-schema.ts')
+    const c = await signUp('client')
+    const now = Date.now()
+    const samples = Object.entries(METRICS).map(([metric, def], i) => ({
+      sampleId: `cat-${i}`,
+      metricType: metric,
+      value: metric === 'sleep_analysis' ? 1 : metric === 'workout' ? 30 : (def.min + def.max) / 2,
+      unit: def.unit,
+      startAt: new Date(now - 2 * H).toISOString(),
+      measuredAt: new Date(now - H).toISOString(),
+      ...(metric === 'sleep_analysis' ? { category: 'asleepCore' } : metric === 'workout' ? { category: 'running' } : {}),
+    }))
+    const all = ['hrv', 'resting_heart_rate', 'heart_rate', 'sleep', 'activity', 'workouts', 'vo2_max', 'vitals', 'mobility', 'body', 'scores']
+    const r = await ingest(c.token, { schemaVersion: 1, device: { ...device, installationId: '6f1c1d8e-2b1e-4d0e-9a5a-0c0a5c1e9b20' }, timeZone: 'Australia/Sydney', enabledCategories: all, samples })
+    expect(r.status, JSON.stringify(r.body)).toBe(200)
+    expect(r.body.rejected).toEqual([])
+    expect(r.body.accepted).toBe(samples.length)
+  })
+
+  it('trainer only receives snapshot sections for granted categories (privacy fix)', async () => {
+    const c = await signUp('client')
+    const t = await signUp('trainer')
+    const tc = createClient(URL, ANON, { global: { headers: { Authorization: `Bearer ${t.token}` } }, auth: { persistSession: false } })
+    const cc = createClient(URL, ANON, { global: { headers: { Authorization: `Bearer ${c.token}` } }, auth: { persistSession: false } })
+    const { data: inv } = await tc.from('trainer_invitations').insert({ trainer_id: t.userId }).select('code').single()
+    await cc.rpc('accept_invitation', { p_code: inv!.code, p_share: ['scores'] }) // only estimates
+
+    const at = (h: number) => new Date(Date.now() - h * H).toISOString()
+    const samples: Record<string, unknown>[] = []
+    for (let d = 0; d < 8; d++) {
+      samples.push({ sampleId: `h${d}`, metricType: 'hrv_sdnn', value: 50 + d, unit: 'ms', startAt: at(d * 24 + 2), measuredAt: at(d * 24 + 2) })
+      samples.push({ sampleId: `o${d}`, metricType: 'oxygen_saturation', value: 97, unit: '%', startAt: at(d * 24 + 4), measuredAt: at(d * 24 + 4) })
+      samples.push({ sampleId: `r${d}`, metricType: 'resting_heart_rate', value: 56, unit: 'bpm', startAt: at(d * 24 + 2), measuredAt: at(d * 24 + 2) })
+    }
+    samples.push({ sampleId: 'vo2', metricType: 'vo2_max', value: 45, unit: 'mL/kg/min', startAt: at(5), measuredAt: at(5) })
+    await ingest(c.token, { schemaVersion: 1, device: { ...device, installationId: '6f1c1d8e-2b1e-4d0e-9a5a-0c0a5c1e9b21' }, timeZone: 'Australia/Sydney', enabledCategories: ['hrv', 'vitals', 'resting_heart_rate', 'vo2_max', 'scores'], samples })
+
+    // Direct table read is no longer possible for trainers.
+    const { data: direct } = await tc.from('health_snapshots').select('assessment').eq('user_id', c.userId)
+    expect(direct).toEqual([])
+
+    const { data: red } = await tc.rpc('client_health_snapshot', { p_client: c.userId })
+    const a = (red as { assessment: Record<string, any> }).assessment
+    expect(a.scores.readiness).toBeDefined() // granted
+    expect(a.latest?.hrv).toBeUndefined() // raw HRV not granted
+    expect(a.rawSummary?.baselines?.hrv).toBeUndefined()
+    expect(a.baselineComparison?.hrvDeltaPercent).toBeUndefined()
+    expect(a.signals).toBeUndefined()
+    expect(a.fitness?.vitals).toBeUndefined()
+    expect(a.fitness?.cardio).toBeUndefined()
+
+    // Owner gets everything, including the new fitness section.
+    const { data: own } = await cc.rpc('client_health_snapshot', { p_client: c.userId })
+    const o = (own as { assessment: Record<string, any> }).assessment
+    expect(o.latest.hrv.value).toBeGreaterThan(0)
+    expect(o.fitness.vitals.signals[0].latest).toBe(97)
+    expect(o.fitness.cardio.vo2Max).toBe(45)
+
+    // Granting vitals reveals exactly that section.
+    const { data: perm } = await cc.from('health_sharing_permissions').select('id').eq('trainer_id', t.userId).eq('category', 'vitals').single()
+    await cc.from('health_sharing_permissions').update({ granted: true }).eq('id', perm!.id)
+    const { data: red2 } = await tc.rpc('client_health_snapshot', { p_client: c.userId })
+    const a2 = (red2 as { assessment: Record<string, any> }).assessment
+    expect(a2.fitness.vitals.signals[0].latest).toBe(97)
+    expect(a2.fitness.cardio).toBeUndefined()
+
+    // Unrelated trainer gets nothing.
+    const stranger = await signUp('trainer')
+    const sc = createClient(URL, ANON, { global: { headers: { Authorization: `Bearer ${stranger.token}` } }, auth: { persistSession: false } })
+    const { data: none } = await sc.rpc('client_health_snapshot', { p_client: c.userId })
+    expect(none).toBeNull()
   })
 })
