@@ -1,0 +1,1450 @@
+From 2fbae0a0592b5d1a68513a6392b9959095a84e07 Mon Sep 17 00:00:00 2001
+From: u7782042 <u7782042@anu.edu.au>
+Date: Sun, 8 Nov 2026 15:23:13 +1100
+Subject: [PATCH] =?UTF-8?q?Add=20FitCheck-In=20Sync=20module=20(HealthKit?=
+ =?UTF-8?q?=20=E2=86=92=20FitCheck-In=20upload=20bridge)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Independent module under HealthMonitor/Sources/FitCheckInSync:
+- Supabase email sign-in with Keychain session storage and token refresh
+- HKAnchoredObjectQuery-based reads (HealthKit UUIDs for idempotent upload)
+- daily/hourly statistics buckets with deterministic ids
+- batched HTTPS upload with exponential-backoff retry and error display
+- optional HealthKit background delivery (best effort)
+- Today toolbar entry point; existing features unchanged
+
+project.yml now declares the HealthKit entitlement and widget extension
+point so 'xcodegen generate' no longer strips them, and keeps the
+signing team.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .gitignore                                    |   4 +
+ Config/FitCheckIn.local.xcconfig.example      |   3 +
+ Config/FitCheckIn.xcconfig                    |   6 +
+ HealthMonitor.xcodeproj/project.pbxproj       |  52 ++-
+ .../Resources/HealthMonitor.entitlements      |   2 +
+ HealthMonitor/Resources/Info.plist            |   4 +
+ .../Sources/App/HealthMonitorApp.swift        |   2 +
+ .../FitCheckInSync/FitCheckInAPIClient.swift  | 171 ++++++++++
+ .../FitCheckInHealthReader.swift              | 304 ++++++++++++++++++
+ .../FitCheckInSync/FitCheckInModels.swift     | 168 ++++++++++
+ .../FitCheckInSyncManager.swift               | 175 ++++++++++
+ .../FitCheckInSync/FitCheckInSyncView.swift   | 163 ++++++++++
+ .../Sources/FitCheckInSync/README.md          |  42 +++
+ .../Views/Today/TodayDashboardView.swift      |  12 +
+ project.yml                                   |  16 +-
+ 15 files changed, 1120 insertions(+), 4 deletions(-)
+ create mode 100644 .gitignore
+ create mode 100644 Config/FitCheckIn.local.xcconfig.example
+ create mode 100644 Config/FitCheckIn.xcconfig
+ create mode 100644 HealthMonitor/Sources/FitCheckInSync/FitCheckInAPIClient.swift
+ create mode 100644 HealthMonitor/Sources/FitCheckInSync/FitCheckInHealthReader.swift
+ create mode 100644 HealthMonitor/Sources/FitCheckInSync/FitCheckInModels.swift
+ create mode 100644 HealthMonitor/Sources/FitCheckInSync/FitCheckInSyncManager.swift
+ create mode 100644 HealthMonitor/Sources/FitCheckInSync/FitCheckInSyncView.swift
+ create mode 100644 HealthMonitor/Sources/FitCheckInSync/README.md
+
+diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000..957ee87
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1,4 @@
++build/
++Config/FitCheckIn.local.xcconfig
++xcuserdata/
++.DS_Store
+diff --git a/Config/FitCheckIn.local.xcconfig.example b/Config/FitCheckIn.local.xcconfig.example
+new file mode 100644
+index 0000000..f4647b8
+--- /dev/null
++++ b/Config/FitCheckIn.local.xcconfig.example
+@@ -0,0 +1,3 @@
++// Note the $() trick: xcconfig treats "//" as a comment start.
++FITCHECKIN_SUPABASE_URL = https:/$()/abcdefghijklmno.supabase.co
++FITCHECKIN_SUPABASE_ANON_KEY = sb_publishable_xxxxxxxxxxxxxxxxxxxxxxxx
+diff --git a/Config/FitCheckIn.xcconfig b/Config/FitCheckIn.xcconfig
+new file mode 100644
+index 0000000..a7c9b63
+--- /dev/null
++++ b/Config/FitCheckIn.xcconfig
+@@ -0,0 +1,6 @@
++// FitCheck-In Sync configuration (PUBLIC values only).
++// Copy Config/FitCheckIn.local.xcconfig.example to Config/FitCheckIn.local.xcconfig and fill it in.
++// The local file is git-ignored. NEVER put a service_role / sb_secret_ key here.
++FITCHECKIN_SUPABASE_URL = https:/$()/YOUR-PROJECT.supabase.co
++FITCHECKIN_SUPABASE_ANON_KEY =
++#include? "FitCheckIn.local.xcconfig"
+diff --git a/HealthMonitor.xcodeproj/project.pbxproj b/HealthMonitor.xcodeproj/project.pbxproj
+index b2a499c..7e4e7d3 100644
+--- a/HealthMonitor.xcodeproj/project.pbxproj
++++ b/HealthMonitor.xcodeproj/project.pbxproj
+@@ -12,6 +12,7 @@
+ 		2165E53E2EE29579ED5AD4BB /* SharedWidgetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774407AE0984A4DF8CEE75C9 /* SharedWidgetStore.swift */; };
+ 		27DF887C9C203FC69F18BA55 /* SharedWidgetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774407AE0984A4DF8CEE75C9 /* SharedWidgetStore.swift */; };
+ 		3241B86E444FC7CC10177B99 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6CF691C43D2358C3F5BD3BC1 /* WidgetKit.framework */; };
++		38FB3DCA3C5644600D2B3807 /* FitCheckInHealthReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C358C89686EDC6813D46648 /* FitCheckInHealthReader.swift */; };
+ 		3969923E2B7C2F848506BCC3 /* DomainModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09164EC19F86BE43AAA59678 /* DomainModels.swift */; };
+ 		39F7C408112477BE21B8DC6C /* DashboardDefinitions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B6B00770372BB37AC391B39 /* DashboardDefinitions.swift */; };
+ 		3B4AD36B5B0FFE0A49E27EC7 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12B6AB8EA7C71D60E30A6E25 /* AppTheme.swift */; };
+@@ -19,7 +20,9 @@
+ 		4C41774C3C745E0E9AA1DF83 /* WidgetManagementSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07E59B7CF56BC97F0531B610 /* WidgetManagementSheet.swift */; };
+ 		5E36192D456F5267A6958E5C /* InsightCharts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 616C4372DCB06C78604A2C1C /* InsightCharts.swift */; };
+ 		64A40A53CE849A3F8DEC9FD4 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18B7554C182D1599B0615723 /* AppModel.swift */; };
++		64B77CEB5F9598B66CF9ED4B /* FitCheckInAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31E390B83E73A79E7B24548E /* FitCheckInAPIClient.swift */; };
+ 		6878CC93EAC6B9EA3343EF3F /* JournalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D92AB59CA0A9F949F613C02 /* JournalStore.swift */; };
++		74CF623BC98182D6D5D32569 /* FitCheckInSyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 563B995DCF4FCD3EAD9725A9 /* FitCheckInSyncManager.swift */; };
+ 		7DF837CBAF6247A775C16C0D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C5D59C317B7AAC565886A667 /* Assets.xcassets */; };
+ 		7EB51C106C6E9549EEB950E6 /* NutritionDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 690F454684F71C47A8D4CF8C /* NutritionDashboardView.swift */; };
+ 		82D3143F3CC49DB07023EE1A /* TodayDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 922D838C990D1974FD3A1905 /* TodayDashboardView.swift */; };
+@@ -34,6 +37,7 @@
+ 		B58E390CA65CED27C981E1EF /* DashboardCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B94C0BFFB9BB7F7934B6A18 /* DashboardCardView.swift */; };
+ 		BC03F8BAF9447841B69235EB /* HealthMonitorWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F62ED0F1AAFF2ACD5627FA60 /* HealthMonitorWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+ 		C29D6AAA207D0C0C69C8B2D6 /* NutritionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B9AA0DA18692E760F7C6A9 /* NutritionStore.swift */; };
++		C6FC8454C0920D3C3194C36E /* FitCheckInModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101F2141E3E4E94B3EBB6EB7 /* FitCheckInModels.swift */; };
+ 		D1055C0763C95F5F1F5A7F03 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12B6AB8EA7C71D60E30A6E25 /* AppTheme.swift */; };
+ 		D40F794908A5D721442F1BC5 /* DomainModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09164EC19F86BE43AAA59678 /* DomainModels.swift */; };
+ 		DB3455180DF2D8FEDDA09C03 /* HealthDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE4B367AE869BC6F6CD6F06B /* HealthDashboardView.swift */; };
+@@ -42,6 +46,7 @@
+ 		E1D2D5CD43C5F174C2F9453E /* CircularInsightsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79DC8701F44CEC63A3F2791D /* CircularInsightsView.swift */; };
+ 		EAF250193B2B77B092D6F62B /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B3518037FFDDEE2FF44C1F /* RootTabView.swift */; };
+ 		F321439C7A12056E7BF1B794 /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1F4FB943205E5F3D2988A3C5 /* HealthKit.framework */; };
++		FE5B0C3686B756FB1DAD9137 /* FitCheckInSyncView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A1D99B7B843E901167159AC /* FitCheckInSyncView.swift */; };
+ /* End PBXBuildFile section */
+ 
+ /* Begin PBXContainerItemProxy section */
+@@ -71,17 +76,21 @@
+ /* Begin PBXFileReference section */
+ 		07E59B7CF56BC97F0531B610 /* WidgetManagementSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetManagementSheet.swift; sourceTree = "<group>"; };
+ 		09164EC19F86BE43AAA59678 /* DomainModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomainModels.swift; sourceTree = "<group>"; };
++		101F2141E3E4E94B3EBB6EB7 /* FitCheckInModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FitCheckInModels.swift; sourceTree = "<group>"; };
+ 		12B6AB8EA7C71D60E30A6E25 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+-		167EDBB84E4BA768A9E27DF1 /* HealthMonitor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HealthMonitor.app; sourceTree = BUILT_PRODUCTS_DIR; };
++		167EDBB84E4BA768A9E27DF1 /* HealthMonitor.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = HealthMonitor.app; sourceTree = BUILT_PRODUCTS_DIR; };
+ 		17DABAAB9BB4DC5659C8D169 /* JournalAnalysisService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalAnalysisService.swift; sourceTree = "<group>"; };
+ 		18B7554C182D1599B0615723 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+ 		1F4FB943205E5F3D2988A3C5 /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = System/Library/Frameworks/HealthKit.framework; sourceTree = SDKROOT; };
+ 		272CAF8FDC9243B37750ADF2 /* Charts.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Charts.framework; path = System/Library/Frameworks/Charts.framework; sourceTree = SDKROOT; };
+ 		2ED989496041A79AD5F4BDD1 /* FitnessDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FitnessDashboardView.swift; sourceTree = "<group>"; };
+ 		3166474AE7C00BBBF4732A31 /* HealthMonitorWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthMonitorWidgetsBundle.swift; sourceTree = "<group>"; };
++		31E390B83E73A79E7B24548E /* FitCheckInAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FitCheckInAPIClient.swift; sourceTree = "<group>"; };
+ 		346E3B626D2EAAABDF805EDB /* HealthMonitorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthMonitorApp.swift; sourceTree = "<group>"; };
+ 		35761EBA7BFAADC6DB69A33E /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
++		3C358C89686EDC6813D46648 /* FitCheckInHealthReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FitCheckInHealthReader.swift; sourceTree = "<group>"; };
+ 		4B6B00770372BB37AC391B39 /* DashboardDefinitions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardDefinitions.swift; sourceTree = "<group>"; };
++		563B995DCF4FCD3EAD9725A9 /* FitCheckInSyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FitCheckInSyncManager.swift; sourceTree = "<group>"; };
+ 		59D3E1817F8B5187D8802CC1 /* HealthMonitorWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthMonitorWidget.swift; sourceTree = "<group>"; };
+ 		5D92AB59CA0A9F949F613C02 /* JournalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalStore.swift; sourceTree = "<group>"; };
+ 		616C4372DCB06C78604A2C1C /* InsightCharts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightCharts.swift; sourceTree = "<group>"; };
+@@ -93,6 +102,7 @@
+ 		7B94C0BFFB9BB7F7934B6A18 /* DashboardCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardCardView.swift; sourceTree = "<group>"; };
+ 		84ACA6DF5BB68124F67263FA /* DerivedMetricsEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DerivedMetricsEngine.swift; sourceTree = "<group>"; };
+ 		922D838C990D1974FD3A1905 /* TodayDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayDashboardView.swift; sourceTree = "<group>"; };
++		9A1D99B7B843E901167159AC /* FitCheckInSyncView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FitCheckInSyncView.swift; sourceTree = "<group>"; };
+ 		B3BF45BC55D2D6F75370289C /* DashboardLayoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardLayoutStore.swift; sourceTree = "<group>"; };
+ 		B587606AAD7783EB21C33973 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+ 		B70AE86219A8FCE58021A590 /* JournalComposerTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JournalComposerTextView.swift; sourceTree = "<group>"; };
+@@ -101,8 +111,9 @@
+ 		D1607BAC25EF3049AB46922A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+ 		DBEE88FF790D3DC66502269B /* DetailSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailSheets.swift; sourceTree = "<group>"; };
+ 		E2B9AA0DA18692E760F7C6A9 /* NutritionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutritionStore.swift; sourceTree = "<group>"; };
++		E37D06F0F2BF7B908E4EBC0A /* FitCheckIn.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = FitCheckIn.xcconfig; sourceTree = "<group>"; };
+ 		F2B3518037FFDDEE2FF44C1F /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
+-		F62ED0F1AAFF2ACD5627FA60 /* HealthMonitorWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HealthMonitorWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
++		F62ED0F1AAFF2ACD5627FA60 /* HealthMonitorWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = HealthMonitorWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+ 		FE4B367AE869BC6F6CD6F06B /* HealthDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthDashboardView.swift; sourceTree = "<group>"; };
+ /* End PBXFileReference section */
+ 
+@@ -243,6 +254,7 @@
+ 			isa = PBXGroup;
+ 			children = (
+ 				8B6F8DED6A6B41F8E9A64495 /* App */,
++				FCA75A9001DD755DB3235CFA /* FitCheckInSync */,
+ 				EC0C06D5ACDA2443C1404E22 /* Models */,
+ 				D9E41212448923E0C2B4CC27 /* Services */,
+ 				6110423AC5821754BAC36A75 /* Shared */,
+@@ -288,6 +300,14 @@
+ 			path = Shared;
+ 			sourceTree = "<group>";
+ 		};
++		E8E0D29821A3D078E5498820 /* Config */ = {
++			isa = PBXGroup;
++			children = (
++				E37D06F0F2BF7B908E4EBC0A /* FitCheckIn.xcconfig */,
++			);
++			path = Config;
++			sourceTree = "<group>";
++		};
+ 		EC0C06D5ACDA2443C1404E22 /* Models */ = {
+ 			isa = PBXGroup;
+ 			children = (
+@@ -300,6 +320,7 @@
+ 		F00AD1CD5693AD428424EF95 = {
+ 			isa = PBXGroup;
+ 			children = (
++				E8E0D29821A3D078E5498820 /* Config */,
+ 				2DAAEE2A4F6EB27200614EB2 /* Resources */,
+ 				4BC778F30693EB8A9D73E5EE /* Resources */,
+ 				CD8E3678A5A44219A29FA1B1 /* Sources */,
+@@ -309,6 +330,18 @@
+ 			);
+ 			sourceTree = "<group>";
+ 		};
++		FCA75A9001DD755DB3235CFA /* FitCheckInSync */ = {
++			isa = PBXGroup;
++			children = (
++				31E390B83E73A79E7B24548E /* FitCheckInAPIClient.swift */,
++				3C358C89686EDC6813D46648 /* FitCheckInHealthReader.swift */,
++				101F2141E3E4E94B3EBB6EB7 /* FitCheckInModels.swift */,
++				563B995DCF4FCD3EAD9725A9 /* FitCheckInSyncManager.swift */,
++				9A1D99B7B843E901167159AC /* FitCheckInSyncView.swift */,
++			);
++			path = FitCheckInSync;
++			sourceTree = "<group>";
++		};
+ /* End PBXGroup section */
+ 
+ /* Begin PBXNativeTarget section */
+@@ -359,6 +392,14 @@
+ 			attributes = {
+ 				BuildIndependentTargetsInParallel = YES;
+ 				LastUpgradeCheck = 1430;
++				TargetAttributes = {
++					98B7810463D84565AB37EDEC = {
++						DevelopmentTeam = VUM9VB77JR;
++					};
++					AAA0DACBE601857AECA36717 = {
++						DevelopmentTeam = VUM9VB77JR;
++					};
++				};
+ 			};
+ 			buildConfigurationList = 34F1E3C99A63658119A25633 /* Build configuration list for PBXProject "HealthMonitor" */;
+ 			developmentRegion = en;
+@@ -405,6 +446,11 @@
+ 				B581F758425634A4884955A0 /* DerivedMetricsEngine.swift in Sources */,
+ 				09CA5189EE29B4E732324FA2 /* DetailSheets.swift in Sources */,
+ 				3969923E2B7C2F848506BCC3 /* DomainModels.swift in Sources */,
++				64B77CEB5F9598B66CF9ED4B /* FitCheckInAPIClient.swift in Sources */,
++				38FB3DCA3C5644600D2B3807 /* FitCheckInHealthReader.swift in Sources */,
++				C6FC8454C0920D3C3194C36E /* FitCheckInModels.swift in Sources */,
++				74CF623BC98182D6D5D32569 /* FitCheckInSyncManager.swift in Sources */,
++				FE5B0C3686B756FB1DAD9137 /* FitCheckInSyncView.swift in Sources */,
+ 				927CF192D23DF3A82781F636 /* FitnessDashboardView.swift in Sources */,
+ 				DB3455180DF2D8FEDDA09C03 /* HealthDashboardView.swift in Sources */,
+ 				A2A686A2787F09C221A884B3 /* HealthKitService.swift in Sources */,
+@@ -448,6 +494,7 @@
+ /* Begin XCBuildConfiguration section */
+ 		044BD237AADE5F5B101002FB /* Release */ = {
+ 			isa = XCBuildConfiguration;
++			baseConfigurationReference = E37D06F0F2BF7B908E4EBC0A /* FitCheckIn.xcconfig */;
+ 			buildSettings = {
+ 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+ 				CODE_SIGN_ENTITLEMENTS = HealthMonitor/Resources/HealthMonitor.entitlements;
+@@ -490,6 +537,7 @@
+ 		};
+ 		1A2109298E95676C864DD7FE /* Debug */ = {
+ 			isa = XCBuildConfiguration;
++			baseConfigurationReference = E37D06F0F2BF7B908E4EBC0A /* FitCheckIn.xcconfig */;
+ 			buildSettings = {
+ 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+ 				CODE_SIGN_ENTITLEMENTS = HealthMonitor/Resources/HealthMonitor.entitlements;
+diff --git a/HealthMonitor/Resources/HealthMonitor.entitlements b/HealthMonitor/Resources/HealthMonitor.entitlements
+index e10f430..54bc426 100644
+--- a/HealthMonitor/Resources/HealthMonitor.entitlements
++++ b/HealthMonitor/Resources/HealthMonitor.entitlements
+@@ -4,5 +4,7 @@
+ <dict>
+ 	<key>com.apple.developer.healthkit</key>
+ 	<true/>
++	<key>com.apple.developer.healthkit.background-delivery</key>
++	<true/>
+ </dict>
+ </plist>
+diff --git a/HealthMonitor/Resources/Info.plist b/HealthMonitor/Resources/Info.plist
+index 4ee478d..1c95114 100644
+--- a/HealthMonitor/Resources/Info.plist
++++ b/HealthMonitor/Resources/Info.plist
+@@ -20,6 +20,10 @@
+ 	<string>1.0</string>
+ 	<key>CFBundleVersion</key>
+ 	<string>1</string>
++	<key>FitCheckInSupabaseAnonKey</key>
++	<string>$(FITCHECKIN_SUPABASE_ANON_KEY)</string>
++	<key>FitCheckInSupabaseURL</key>
++	<string>$(FITCHECKIN_SUPABASE_URL)</string>
+ 	<key>ITSAppUsesNonExemptEncryption</key>
+ 	<false/>
+ 	<key>NSHealthShareUsageDescription</key>
+diff --git a/HealthMonitor/Sources/App/HealthMonitorApp.swift b/HealthMonitor/Sources/App/HealthMonitorApp.swift
+index ed19bc1..8840001 100644
+--- a/HealthMonitor/Sources/App/HealthMonitorApp.swift
++++ b/HealthMonitor/Sources/App/HealthMonitorApp.swift
+@@ -3,6 +3,7 @@ import SwiftUI
+ @main
+ struct HealthMonitorApp: App {
+     @StateObject private var model = AppModel()
++    @StateObject private var fitCheckInSync = FitCheckInSyncManager()
+ 
+     var body: some Scene {
+         WindowGroup {
+@@ -11,6 +12,7 @@ struct HealthMonitorApp: App {
+                 .environmentObject(model.layoutStore)
+                 .environmentObject(model.journalStore)
+                 .environmentObject(model.nutritionStore)
++                .environmentObject(fitCheckInSync)
+                 .preferredColorScheme(.dark)
+                 .task {
+                     await model.bootstrap()
+diff --git a/HealthMonitor/Sources/FitCheckInSync/FitCheckInAPIClient.swift b/HealthMonitor/Sources/FitCheckInSync/FitCheckInAPIClient.swift
+new file mode 100644
+index 0000000..dc1558d
+--- /dev/null
++++ b/HealthMonitor/Sources/FitCheckInSync/FitCheckInAPIClient.swift
+@@ -0,0 +1,171 @@
++import Foundation
++import Security
++
++/// Public, non-secret configuration read from Info.plist.
++/// NEVER put a service-role / secret key in the app: only the anon (publishable) key.
++struct FitCheckInConfig {
++    let supabaseURL: URL
++    let anonKey: String
++
++    static func load(bundle: Bundle = .main) -> FitCheckInConfig? {
++        guard
++            let urlString = bundle.object(forInfoDictionaryKey: "FitCheckInSupabaseURL") as? String,
++            let url = URL(string: urlString), url.scheme == "https" || url.host == "127.0.0.1" || url.host == "localhost",
++            let key = bundle.object(forInfoDictionaryKey: "FitCheckInSupabaseAnonKey") as? String,
++            !key.isEmpty, !key.hasPrefix("sb_secret_")
++        else { return nil }
++        return FitCheckInConfig(supabaseURL: url, anonKey: key)
++    }
++}
++
++/// Minimal Keychain wrapper for the session (access + refresh token).
++/// kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly: available to background delivery,
++/// never migrated to other devices or backups.
++enum FitCheckInKeychain {
++    private static let service = "com.zdy.healthmonitor.fitcheckin"
++
++    static func save(_ data: Data, account: String) {
++        let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
++        SecItemDelete(base as CFDictionary)
++        var add = base
++        add[kSecValueData as String] = data
++        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
++        SecItemAdd(add as CFDictionary, nil)
++    }
++
++    static func load(account: String) -> Data? {
++        let query: [String: Any] = [
++            kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account,
++            kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne,
++        ]
++        var item: CFTypeRef?
++        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess else { return nil }
++        return item as? Data
++    }
++
++    static func delete(account: String) {
++        SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account] as CFDictionary)
++    }
++}
++
++struct FitCheckInSession: Codable, Equatable {
++    var accessToken: String
++    var refreshToken: String
++    var expiresAt: Date
++    var userId: String
++    var email: String
++}
++
++/// Talks to Supabase Auth (GoTrue REST) and the `health-ingest` Edge Function over HTTPS.
++actor FitCheckInAPIClient {
++    private let config: FitCheckInConfig
++    private let urlSession: URLSession
++    private let keychainAccount = "session"
++    private(set) var session: FitCheckInSession?
++
++    init(config: FitCheckInConfig, urlSession: URLSession = .shared) {
++        self.config = config
++        self.urlSession = urlSession
++        if let data = FitCheckInKeychain.load(account: keychainAccount) {
++            session = try? JSONDecoder().decode(FitCheckInSession.self, from: data)
++        }
++    }
++
++    // MARK: Auth
++
++    func signIn(email: String, password: String) async throws -> FitCheckInSession {
++        let body = try JSONSerialization.data(withJSONObject: ["email": email, "password": password])
++        let data = try await post(path: "auth/v1/token?grant_type=password", body: body, bearer: nil, mapAuthErrors: true)
++        let s = try decodeSession(data, fallbackEmail: email)
++        store(s)
++        return s
++    }
++
++    func signOut() async {
++        if let token = session?.accessToken {
++            _ = try? await post(path: "auth/v1/logout", body: Data("{}".utf8), bearer: token, mapAuthErrors: false)
++        }
++        session = nil
++        FitCheckInKeychain.delete(account: keychainAccount)
++    }
++
++    /// Returns a valid access token, refreshing it if it expires within 60 s.
++    func validAccessToken() async throws -> String {
++        guard let s = session else { throw FitCheckInError.notSignedIn }
++        if s.expiresAt.timeIntervalSinceNow > 60 { return s.accessToken }
++        let body = try JSONSerialization.data(withJSONObject: ["refresh_token": s.refreshToken])
++        do {
++            let data = try await post(path: "auth/v1/token?grant_type=refresh_token", body: body, bearer: nil, mapAuthErrors: true)
++            let refreshed = try decodeSession(data, fallbackEmail: s.email)
++            store(refreshed)
++            return refreshed.accessToken
++        } catch FitCheckInError.invalidCredentials {
++            await signOut()
++            throw FitCheckInError.notSignedIn
++        }
++    }
++
++    // MARK: Upload
++
++    func upload(_ request: HealthUploadRequest) async throws -> HealthUploadResponse {
++        let token = try await validAccessToken()
++        let encoder = JSONEncoder()
++        encoder.dateEncodingStrategy = .iso8601
++        let data = try await post(path: "functions/v1/health-ingest", body: try encoder.encode(request), bearer: token, mapAuthErrors: false)
++        do {
++            return try JSONDecoder().decode(HealthUploadResponse.self, from: data)
++        } catch {
++            throw FitCheckInError.decoding
++        }
++    }
++
++    // MARK: Plumbing
++
++    private func store(_ s: FitCheckInSession) {
++        session = s
++        if let data = try? JSONEncoder().encode(s) { FitCheckInKeychain.save(data, account: keychainAccount) }
++    }
++
++    private func decodeSession(_ data: Data, fallbackEmail: String) throws -> FitCheckInSession {
++        struct Raw: Decodable {
++            let access_token: String
++            let refresh_token: String
++            let expires_in: Double
++            let user: User
++            struct User: Decodable { let id: String; let email: String? }
++        }
++        guard let raw = try? JSONDecoder().decode(Raw.self, from: data) else { throw FitCheckInError.decoding }
++        return FitCheckInSession(
++            accessToken: raw.access_token,
++            refreshToken: raw.refresh_token,
++            expiresAt: Date().addingTimeInterval(raw.expires_in),
++            userId: raw.user.id,
++            email: raw.user.email ?? fallbackEmail
++        )
++    }
++
++    private func post(path: String, body: Data, bearer: String?, mapAuthErrors: Bool) async throws -> Data {
++        guard let url = URL(string: path, relativeTo: config.supabaseURL.appendingPathComponent("/")) else { throw FitCheckInError.notConfigured }
++        var req = URLRequest(url: url, timeoutInterval: 30)
++        req.httpMethod = "POST"
++        req.httpBody = body
++        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
++        req.setValue(config.anonKey, forHTTPHeaderField: "apikey")
++        if let bearer { req.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization") }
++
++        let data: Data
++        let response: URLResponse
++        do {
++            (data, response) = try await urlSession.data(for: req)
++        } catch {
++            throw FitCheckInError.network((error as NSError).localizedDescription)
++        }
++        guard let http = response as? HTTPURLResponse else { throw FitCheckInError.network("no_response") }
++        guard (200..<300).contains(http.statusCode) else {
++            if mapAuthErrors, http.statusCode == 400 || http.statusCode == 401 { throw FitCheckInError.invalidCredentials }
++            let code = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String ?? "http_\(http.statusCode)"
++            throw FitCheckInError.server(status: http.statusCode, code: code)
++        }
++        return data
++    }
++}
+diff --git a/HealthMonitor/Sources/FitCheckInSync/FitCheckInHealthReader.swift b/HealthMonitor/Sources/FitCheckInSync/FitCheckInHealthReader.swift
+new file mode 100644
+index 0000000..120c0ec
+--- /dev/null
++++ b/HealthMonitor/Sources/FitCheckInSync/FitCheckInHealthReader.swift
+@@ -0,0 +1,304 @@
++import Foundation
++import HealthKit
++
++/// Reads Apple Health samples for upload.
++///
++/// Reuse from the existing app (health_monitor_ios):
++///  - same HealthKit units as `HealthKitService` (bpm = count/min, HRV in ms, VO₂ in mL/(kg·min))
++///  - same sleep-stage semantics as `HealthKitService.fetchSleepSummary` (inBed/awake are not "asleep")
++///  - same `HKWorkoutActivityType` → `WorkoutKind` mapping as `HealthKitService.workoutKind(for:)`
++///  - `HealthPermissionState` from DomainModels
++///
++/// Difference from `HealthKitService`: that service reads *aggregates* (latest/sum/avg), which
++/// have no stable identity. For an idempotent upload we read individual samples with
++/// `HKAnchoredObjectQuery` (each has a UUID) and persist the anchor, so later syncs only send
++/// new samples. Additive metrics (steps, energy, exercise time) are uploaded as daily
++/// `HKStatisticsCollectionQuery` buckets with deterministic ids so overlapping sources
++/// (iPhone + Watch) are de-duplicated by HealthKit itself, exactly like the existing app's sums.
++struct FitCheckInHealthReader {
++    private let store: HKHealthStore
++    private let calendar = Calendar.current
++    private let anchorDefaults = UserDefaults.standard
++    private static let anchorKeyPrefix = "fitcheckin.anchor."
++
++    init(store: HKHealthStore = HKHealthStore()) {
++        self.store = store
++    }
++
++    var isAvailable: Bool { HKHealthStore.isHealthDataAvailable() }
++
++    // MARK: Authorization (HealthKit system permission — separate from platform sharing grants)
++
++    func readTypes(for categories: Set<FitCheckInCategory>) -> Set<HKObjectType> {
++        var types = Set<HKObjectType>()
++        func q(_ id: HKQuantityTypeIdentifier) { if let t = HKObjectType.quantityType(forIdentifier: id) { types.insert(t) } }
++        if categories.contains(.hrv) { q(.heartRateVariabilitySDNN) }
++        if categories.contains(.restingHeartRate) { q(.restingHeartRate) }
++        if categories.contains(.heartRate) { q(.heartRate) }
++        if categories.contains(.vo2Max) { q(.vo2Max) }
++        if categories.contains(.activity) { q(.stepCount); q(.activeEnergyBurned); q(.basalEnergyBurned); q(.appleExerciseTime) }
++        if categories.contains(.sleep), let s = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) { types.insert(s) }
++        if categories.contains(.workouts) { types.insert(HKObjectType.workoutType()); q(.heartRate) }
++        return types
++    }
++
++    /// HealthKit never reveals whether *read* access was granted (privacy). `success == true`
++    /// only means the prompt was handled; denied types simply return no samples.
++    func requestAuthorization(for categories: Set<FitCheckInCategory>) async -> HealthPermissionState {
++        guard isAvailable else { return .unavailable }
++        let types = readTypes(for: categories)
++        guard !types.isEmpty else { return .unknown }
++        do {
++            try await store.requestAuthorization(toShare: [], read: types)
++            return .authorized
++        } catch {
++            return .denied
++        }
++    }
++
++    // MARK: Read
++
++    /// Reads new samples for the enabled categories. `fullResync` ignores stored anchors
++    /// (used after the user deletes server data). Anchors are only committed after a
++    /// successful upload via `commit(_:)`.
++    func readNewSamples(categories: Set<FitCheckInCategory>, lookbackDays: Int = 30, fullResync: Bool = false) async throws -> ReadResult {
++        let start = calendar.date(byAdding: .day, value: -lookbackDays, to: Date()) ?? Date().addingTimeInterval(-Double(lookbackDays) * 86_400)
++        var samples: [HealthSampleUpload] = []
++        var pendingAnchors: [String: HKQueryAnchor] = [:]
++
++        func anchored(_ type: HKSampleType, key: String) async throws -> [HKSample] {
++            let anchor = fullResync ? nil : loadAnchor(key)
++            let (newSamples, newAnchor) = try await anchoredQuery(type: type, since: start, anchor: anchor)
++            if let newAnchor { pendingAnchors[key] = newAnchor }
++            return newSamples
++        }
++
++        let bpm = HKUnit.count().unitDivided(by: .minute())
++        let quantityMetrics: [(FitCheckInCategory, HKQuantityTypeIdentifier, FitCheckInMetric, HKUnit)] = [
++            (.hrv, .heartRateVariabilitySDNN, .hrvSDNN, .secondUnit(with: .milli)),
++            (.restingHeartRate, .restingHeartRate, .restingHeartRate, bpm),
++            (.vo2Max, .vo2Max, .vo2Max, HKUnit.literUnit(with: .milli).unitDivided(by: HKUnit.gramUnit(with: .kilo).unitMultiplied(by: .minute()))),
++        ]
++        for (category, identifier, metric, unit) in quantityMetrics where categories.contains(category) {
++            guard let type = HKObjectType.quantityType(forIdentifier: identifier) else { continue }
++            for case let s as HKQuantitySample in try await anchored(type, key: metric.rawValue) {
++                samples.append(upload(s, metric: metric, value: s.quantity.doubleValue(for: unit)))
++            }
++        }
++
++        // Heart rate is very dense on Apple Watch; upload hourly averages (deterministic ids) instead of every beat sample.
++        if categories.contains(.heartRate) {
++            samples += try await hourlyAverages(.heartRate, unit: bpm, metric: .heartRate, start: max(start, Date().addingTimeInterval(-7 * 86_400)))
++        }
++
++        if categories.contains(.sleep), let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) {
++            for case let s as HKCategorySample in try await anchored(type, key: FitCheckInMetric.sleepAnalysis.rawValue) {
++                guard let stage = Self.sleepStage(s.value) else { continue }
++                samples.append(upload(s, metric: .sleepAnalysis, value: s.endDate.timeIntervalSince(s.startDate) / 3_600, category: stage))
++            }
++        }
++
++        if categories.contains(.workouts) {
++            for case let w as HKWorkout in try await anchored(HKObjectType.workoutType(), key: FitCheckInMetric.workout.rawValue) {
++                let hr = await heartRateStats(start: w.startDate, end: w.endDate)
++                let kcal = w.statistics(for: HKQuantityType(.activeEnergyBurned))?.sumQuantity()?.doubleValue(for: .kilocalorie())
++                let km = w.totalDistance?.doubleValue(for: .meterUnit(with: .kilo))
++                var item = upload(w, metric: .workout, value: w.duration / 60, category: Self.workoutKind(for: w.workoutActivityType).rawValue)
++                item.metadata = .init(averageHeartRate: hr.average, maxHeartRate: hr.maximum, energyKCal: kcal, distanceKM: km)
++                samples.append(item)
++            }
++        }
++
++        if categories.contains(.activity) {
++            let dayStart = calendar.startOfDay(for: start)
++            samples += try await dailySums(.stepCount, unit: .count(), metric: .stepCount, start: dayStart)
++            samples += try await dailySums(.activeEnergyBurned, unit: .kilocalorie(), metric: .activeEnergy, start: dayStart)
++            samples += try await dailySums(.basalEnergyBurned, unit: .kilocalorie(), metric: .basalEnergy, start: dayStart)
++            samples += try await dailySums(.appleExerciseTime, unit: .minute(), metric: .exerciseTime, start: dayStart)
++        }
++
++        return ReadResult(samples: samples, pendingAnchors: pendingAnchors)
++    }
++
++    struct ReadResult {
++        var samples: [HealthSampleUpload]
++        fileprivate var pendingAnchors: [String: HKQueryAnchor]
++    }
++
++    /// Persist anchors only after the server accepted the batch, so a failed upload is retried next time.
++    func commit(_ result: ReadResult) {
++        for (key, anchor) in result.pendingAnchors { saveAnchor(anchor, key: key) }
++    }
++
++    func resetAnchors() {
++        for key in anchorDefaults.dictionaryRepresentation().keys where key.hasPrefix(Self.anchorKeyPrefix) {
++            anchorDefaults.removeObject(forKey: key)
++        }
++    }
++
++    // MARK: Mapping (mirrors HealthKitService)
++
++    /// Same semantics as `HealthKitService.fetchSleepSummary`.
++    static func sleepStage(_ raw: Int) -> String? {
++        guard let value = HKCategoryValueSleepAnalysis(rawValue: raw) else { return nil }
++        switch value {
++        case .inBed: return "inBed"
++        case .awake: return "awake"
++        case .asleepCore: return "asleepCore"
++        case .asleepDeep: return "asleepDeep"
++        case .asleepREM: return "asleepREM"
++        case .asleepUnspecified: return "asleepUnspecified"
++        @unknown default: return "asleepUnspecified"
++        }
++    }
++
++    /// Same mapping as `HealthKitService.workoutKind(for:)`.
++    static func workoutKind(for activityType: HKWorkoutActivityType) -> WorkoutKind {
++        switch activityType {
++        case .running: return .running
++        case .walking, .hiking: return .walking
++        case .cycling: return .cycling
++        case .traditionalStrengthTraining, .functionalStrengthTraining: return .strength
++        case .yoga, .pilates: return .yoga
++        case .swimming: return .swimming
++        default: return .mixed
++        }
++    }
++
++    private func upload(_ s: HKSample, metric: FitCheckInMetric, value: Double, category: String? = nil) -> HealthSampleUpload {
++        HealthSampleUpload(
++            sampleId: s.uuid.uuidString,
++            metricType: metric,
++            value: value,
++            unit: metric.unit,
++            startAt: s.startDate,
++            measuredAt: s.endDate,
++            category: category,
++            metadata: nil,
++            sourceName: s.sourceRevision.source.name,
++            sourceBundle: s.sourceRevision.source.bundleIdentifier
++        )
++    }
++
++    // MARK: Queries
++
++    private func anchoredQuery(type: HKSampleType, since: Date, anchor: HKQueryAnchor?) async throws -> ([HKSample], HKQueryAnchor?) {
++        try await withCheckedThrowingContinuation { cont in
++            let predicate = HKQuery.predicateForSamples(withStart: since, end: nil)
++            let query = HKAnchoredObjectQuery(type: type, predicate: predicate, anchor: anchor, limit: HKObjectQueryNoLimit) { _, samples, _, newAnchor, error in
++                if let error = error as? HKError, error.code == .errorAuthorizationDenied || error.code == .errorAuthorizationNotDetermined {
++                    cont.resume(returning: ([], nil))
++                } else if let error {
++                    cont.resume(throwing: error)
++                } else {
++                    cont.resume(returning: (samples ?? [], newAnchor))
++                }
++            }
++            store.execute(query)
++        }
++    }
++
++    private func dailySums(_ id: HKQuantityTypeIdentifier, unit: HKUnit, metric: FitCheckInMetric, start: Date) async throws -> [HealthSampleUpload] {
++        try await collection(id, unit: unit, metric: metric, start: start, interval: DateComponents(day: 1), options: .cumulativeSum, idFormat: "yyyy-MM-dd")
++    }
++
++    private func hourlyAverages(_ id: HKQuantityTypeIdentifier, unit: HKUnit, metric: FitCheckInMetric, start: Date) async throws -> [HealthSampleUpload] {
++        try await collection(id, unit: unit, metric: metric, start: start, interval: DateComponents(hour: 1), options: .discreteAverage, idFormat: "yyyy-MM-dd'T'HH")
++    }
++
++    private func collection(_ id: HKQuantityTypeIdentifier, unit: HKUnit, metric: FitCheckInMetric, start: Date, interval: DateComponents, options: HKStatisticsOptions, idFormat: String) async throws -> [HealthSampleUpload] {
++        guard let type = HKObjectType.quantityType(forIdentifier: id) else { return [] }
++        let now = Date()
++        let fmt = DateFormatter()
++        fmt.calendar = Calendar(identifier: .gregorian)
++        fmt.locale = Locale(identifier: "en_US_POSIX")
++        fmt.timeZone = calendar.timeZone
++        fmt.dateFormat = idFormat
++        return try await withCheckedThrowingContinuation { cont in
++            let query = HKStatisticsCollectionQuery(
++                quantityType: type,
++                quantitySamplePredicate: HKQuery.predicateForSamples(withStart: start, end: now),
++                options: options,
++                anchorDate: calendar.startOfDay(for: start),
++                intervalComponents: interval
++            )
++            query.initialResultsHandler = { _, collection, error in
++                if let error = error as? HKError, error.code == .errorAuthorizationDenied {
++                    cont.resume(returning: [])
++                    return
++                }
++                if let error {
++                    cont.resume(throwing: error)
++                    return
++                }
++                var out: [HealthSampleUpload] = []
++                collection?.enumerateStatistics(from: start, to: now) { stats, _ in
++                    let q = options.contains(.cumulativeSum) ? stats.sumQuantity() : stats.averageQuantity()
++                    guard let value = q?.doubleValue(for: unit) else { return }
++                    // Bucket id is the local day/hour, so re-uploads of today's growing total update in place.
++                    out.append(HealthSampleUpload(
++                        sampleId: "\(metric.rawValue):\(fmt.string(from: stats.startDate))",
++                        metricType: metric,
++                        value: value,
++                        unit: metric.unit,
++                        startAt: stats.startDate,
++                        measuredAt: min(stats.endDate, now),
++                        category: nil,
++                        metadata: nil,
++                        sourceName: "Apple Health (aggregated)",
++                        sourceBundle: nil
++                    ))
++                }
++                cont.resume(returning: out)
++            }
++            store.execute(query)
++        }
++    }
++
++    /// Same statistics query as `HealthKitService.fetchHeartRateStats`.
++    private func heartRateStats(start: Date, end: Date) async -> (average: Double?, maximum: Double?) {
++        guard let type = HKObjectType.quantityType(forIdentifier: .heartRate) else { return (nil, nil) }
++        let bpm = HKUnit.count().unitDivided(by: .minute())
++        return await withCheckedContinuation { cont in
++            let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: HKQuery.predicateForSamples(withStart: start, end: end), options: [.discreteAverage, .discreteMax]) { _, result, _ in
++                cont.resume(returning: (result?.averageQuantity()?.doubleValue(for: bpm), result?.maximumQuantity()?.doubleValue(for: bpm)))
++            }
++            store.execute(query)
++        }
++    }
++
++    private func loadAnchor(_ key: String) -> HKQueryAnchor? {
++        guard let data = anchorDefaults.data(forKey: Self.anchorKeyPrefix + key) else { return nil }
++        return try? NSKeyedUnarchiver.unarchivedObject(ofClass: HKQueryAnchor.self, from: data)
++    }
++
++    private func saveAnchor(_ anchor: HKQueryAnchor, key: String) {
++        if let data = try? NSKeyedArchiver.archivedData(withRootObject: anchor, requiringSecureCoding: true) {
++            anchorDefaults.set(data, forKey: Self.anchorKeyPrefix + key)
++        }
++    }
++
++    // MARK: Background delivery (best effort — iOS decides when to wake the app)
++
++    func enableBackgroundDelivery(for categories: Set<FitCheckInCategory>, handler: @escaping @Sendable () async -> Void) {
++        let ids: [HKQuantityTypeIdentifier] = categories.contains(.hrv) ? [.heartRateVariabilitySDNN] : []
++        var types: [HKSampleType] = ids.compactMap { HKObjectType.quantityType(forIdentifier: $0) }
++        if categories.contains(.restingHeartRate), let t = HKObjectType.quantityType(forIdentifier: .restingHeartRate) { types.append(t) }
++        if categories.contains(.sleep), let t = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) { types.append(t) }
++        for type in types {
++            let query = HKObserverQuery(sampleType: type, predicate: nil) { _, completion, error in
++                guard error == nil else { completion(); return }
++                Task {
++                    await handler()
++                    completion()
++                }
++            }
++            store.execute(query)
++            store.enableBackgroundDelivery(for: type, frequency: .hourly) { _, _ in }
++        }
++    }
++
++    func disableBackgroundDelivery() {
++        store.disableAllBackgroundDelivery { _, _ in }
++    }
++}
+diff --git a/HealthMonitor/Sources/FitCheckInSync/FitCheckInModels.swift b/HealthMonitor/Sources/FitCheckInSync/FitCheckInModels.swift
+new file mode 100644
+index 0000000..d3680c9
+--- /dev/null
++++ b/HealthMonitor/Sources/FitCheckInSync/FitCheckInModels.swift
+@@ -0,0 +1,168 @@
++import Foundation
++
++// MARK: - Wire format (mirror of supabase/functions/_shared/metrics/health-schema.ts)
++
++/// Data categories the user can enable for upload. Raw values match the server enum `public.health_category`.
++enum FitCheckInCategory: String, Codable, CaseIterable, Identifiable {
++    case scores
++    case hrv
++    case restingHeartRate = "resting_heart_rate"
++    case heartRate = "heart_rate"
++    case sleep
++    case activity
++    case workouts
++    case vo2Max = "vo2_max"
++
++    var id: String { rawValue }
++
++    var title: String {
++        switch self {
++        case .scores: "准备度 / 恢复度估计 · Readiness estimates"
++        case .hrv: "HRV (SDNN)"
++        case .restingHeartRate: "静息心率 · Resting HR"
++        case .heartRate: "心率 · Heart rate"
++        case .sleep: "睡眠 · Sleep"
++        case .activity: "步数与能量 · Steps & energy"
++        case .workouts: "体能训练 · Workouts"
++        case .vo2Max: "最大摄氧量 · VO₂ max"
++        }
++    }
++
++    /// `scores` is computed server-side from other categories; it has no HealthKit type.
++    var isUploadable: Bool { self != .scores }
++}
++
++/// Metric identifiers + units accepted by the `health-ingest` Edge Function.
++enum FitCheckInMetric: String, Codable {
++    case hrvSDNN = "hrv_sdnn"
++    case restingHeartRate = "resting_heart_rate"
++    case heartRate = "heart_rate"
++    case sleepAnalysis = "sleep_analysis"
++    case stepCount = "step_count"
++    case activeEnergy = "active_energy"
++    case basalEnergy = "basal_energy"
++    case exerciseTime = "exercise_time"
++    case workout
++    case vo2Max = "vo2_max"
++
++    var unit: String {
++        switch self {
++        case .hrvSDNN: "ms"
++        case .restingHeartRate, .heartRate: "bpm"
++        case .sleepAnalysis: "h"
++        case .stepCount: "count"
++        case .activeEnergy, .basalEnergy: "kcal"
++        case .exerciseTime, .workout: "min"
++        case .vo2Max: "mL/kg/min"
++        }
++    }
++}
++
++struct HealthSampleUpload: Codable, Equatable {
++    /// HealthKit UUID, or a deterministic bucket id for daily aggregates ("steps:2026-11-08").
++    var sampleId: String
++    var metricType: FitCheckInMetric
++    var value: Double
++    var unit: String
++    /// Sample start (ISO-8601).
++    var startAt: Date
++    /// Sample end = measurement time (ISO-8601). Distinct from the server's `receivedAt`.
++    var measuredAt: Date
++    /// Sleep stage (sleep_analysis) or `WorkoutKind` raw value (workout).
++    var category: String?
++    var metadata: WorkoutMetadata?
++    var sourceName: String?
++    var sourceBundle: String?
++
++    struct WorkoutMetadata: Codable, Equatable {
++        var averageHeartRate: Double?
++        var maxHeartRate: Double?
++        var energyKCal: Double?
++        var distanceKM: Double?
++    }
++}
++
++struct HealthUploadRequest: Codable {
++    var schemaVersion = 1
++    var device: Device
++    var timeZone: String
++    var enabledCategories: [FitCheckInCategory]
++    var samples: [HealthSampleUpload]
++
++    struct Device: Codable {
++        var installationId: String
++        var name: String
++        var osVersion: String?
++        var appVersion: String?
++    }
++}
++
++struct HealthUploadResponse: Codable {
++    var accepted: Int
++    var duplicates: Int
++    var rejected: [Rejection]
++    var snapshot: Snapshot?
++    var receivedAt: String
++
++    struct Rejection: Codable { var index: Int; var reason: String }
++    struct Snapshot: Codable { var date: String; var completeness: Double; var algorithmVersion: String }
++}
++
++// MARK: - Sync state shown in the UI
++
++enum FitCheckInSyncPhase: Equatable {
++    case idle
++    case authorizing
++    case reading
++    case uploading(done: Int, total: Int)
++    case success
++    case failed(String)
++}
++
++struct FitCheckInSyncRecord: Codable, Equatable {
++    var finishedAt: Date
++    var accepted: Int
++    var duplicates: Int
++    var rejected: Int
++    var completeness: Double?
++    var errorMessage: String?
++}
++
++enum FitCheckInError: LocalizedError, Equatable {
++    case notConfigured
++    case notSignedIn
++    case invalidCredentials
++    case healthDataUnavailable
++    case healthAuthorizationDenied
++    case network(String)
++    case server(status: Int, code: String)
++    case decoding
++
++    var errorDescription: String? {
++        switch self {
++        case .notConfigured: "FitCheck-In 未配置（Info.plist 缺少 FitCheckInSupabaseURL / FitCheckInSupabaseAnonKey）。"
++        case .notSignedIn: "请先登录 FitCheck-In 账号。"
++        case .invalidCredentials: "邮箱或密码不正确。"
++        case .healthDataUnavailable: "此设备不支持 Apple 健康。"
++        case .healthAuthorizationDenied: "未获得 Apple 健康读取授权。请在“设置 › 健康 › 数据访问与设备”中允许。"
++        case .network(let m): "网络异常：\(m)"
++        case .server(let status, let code):
++            switch code {
++            case "only_clients_can_upload": "只有客户账号可以上传健康数据。"
++            case "demo_accounts_cannot_upload": "演示账号不能上传真实健康数据。"
++            case "invalid_token", "missing_token": "登录已过期，请重新登录。"
++            default: "服务器错误（\(status)：\(code)）。"
++            }
++        case .decoding: "服务器返回了无法解析的数据。"
++        }
++    }
++
++    /// Transient errors are retried with backoff; others are surfaced immediately.
++    var isRetryable: Bool {
++        switch self {
++        case .network: true
++        case .server(let status, _): status >= 500 || status == 429
++        default: false
++        }
++    }
++}
+diff --git a/HealthMonitor/Sources/FitCheckInSync/FitCheckInSyncManager.swift b/HealthMonitor/Sources/FitCheckInSync/FitCheckInSyncManager.swift
+new file mode 100644
+index 0000000..e260a5a
+--- /dev/null
++++ b/HealthMonitor/Sources/FitCheckInSync/FitCheckInSyncManager.swift
+@@ -0,0 +1,175 @@
++import Foundation
++import SwiftUI
++#if canImport(UIKit)
++import UIKit
++#endif
++
++/// Orchestrates sign-in, HealthKit authorization, reading, batched upload with retry,
++/// and persisted sync status. Independent of `AppModel` so the existing health+
++/// features are untouched.
++@MainActor
++final class FitCheckInSyncManager: ObservableObject {
++    @Published private(set) var session: FitCheckInSession?
++    @Published private(set) var phase: FitCheckInSyncPhase = .idle
++    @Published private(set) var lastSync: FitCheckInSyncRecord?
++    @Published private(set) var permissionState: HealthPermissionState = .unknown
++    @Published var enabledCategories: Set<FitCheckInCategory> {
++        didSet { persistCategories() }
++    }
++    @Published var backgroundSyncEnabled: Bool {
++        didSet {
++            UserDefaults.standard.set(backgroundSyncEnabled, forKey: Keys.background)
++            configureBackgroundDelivery()
++        }
++    }
++
++    let isConfigured: Bool
++    private let api: FitCheckInAPIClient?
++    private let reader = FitCheckInHealthReader()
++    private static let batchSize = 1_000
++    private static let maxAttempts = 4
++
++    private enum Keys {
++        static let categories = "fitcheckin.categories"
++        static let lastSync = "fitcheckin.lastSync"
++        static let installation = "fitcheckin.installationId"
++        static let background = "fitcheckin.backgroundSync"
++    }
++
++    init(config: FitCheckInConfig? = .load()) {
++        isConfigured = config != nil
++        api = config.map { FitCheckInAPIClient(config: $0) }
++        let saved = (UserDefaults.standard.array(forKey: Keys.categories) as? [String])?.compactMap(FitCheckInCategory.init(rawValue:))
++        enabledCategories = Set(saved ?? [.scores, .hrv, .restingHeartRate, .sleep])
++        backgroundSyncEnabled = UserDefaults.standard.bool(forKey: Keys.background)
++        if let data = UserDefaults.standard.data(forKey: Keys.lastSync) {
++            lastSync = try? JSONDecoder().decode(FitCheckInSyncRecord.self, from: data)
++        }
++        Task { await self.restoreSession() }
++    }
++
++    private func restoreSession() async {
++        session = await api?.session
++        configureBackgroundDelivery()
++    }
++
++    var installationId: String {
++        if let id = UserDefaults.standard.string(forKey: Keys.installation) { return id }
++        let id = UUID().uuidString.lowercased()
++        UserDefaults.standard.set(id, forKey: Keys.installation)
++        return id
++    }
++
++    // MARK: Account / device binding
++
++    func signIn(email: String, password: String) async throws {
++        guard let api else { throw FitCheckInError.notConfigured }
++        session = try await api.signIn(email: email.trimmingCharacters(in: .whitespaces), password: password)
++    }
++
++    /// Unlinks this device: signs out, forgets anchors and stops background delivery.
++    /// Server data stays until the user deletes it on the web (Settings › Privacy).
++    func unlinkDevice() async {
++        await api?.signOut()
++        reader.disableBackgroundDelivery()
++        reader.resetAnchors()
++        session = nil
++        lastSync = nil
++        UserDefaults.standard.removeObject(forKey: Keys.lastSync)
++        UserDefaults.standard.removeObject(forKey: Keys.installation)
++        phase = .idle
++    }
++
++    // MARK: Sync
++
++    func requestHealthAuthorization() async {
++        phase = .authorizing
++        permissionState = await reader.requestAuthorization(for: enabledCategories)
++        phase = permissionState == .authorized ? .idle : .failed(FitCheckInError.healthAuthorizationDenied.localizedDescription)
++    }
++
++    /// Manual sync (phase 1). `fullResync` re-sends the last 30 days, e.g. after server-side deletion.
++    func syncNow(fullResync: Bool = false) async {
++        if case .uploading = phase { return }
++        if case .reading = phase { return }
++        do {
++            guard let api else { throw FitCheckInError.notConfigured }
++            guard session != nil else { throw FitCheckInError.notSignedIn }
++            guard reader.isAvailable else { throw FitCheckInError.healthDataUnavailable }
++            if permissionState != .authorized {
++                await requestHealthAuthorization()
++                guard permissionState == .authorized else { throw FitCheckInError.healthAuthorizationDenied }
++            }
++
++            phase = .reading
++            let result = try await reader.readNewSamples(categories: enabledCategories, fullResync: fullResync)
++            let uploadable = enabledCategories
++            let batches = stride(from: 0, to: max(result.samples.count, 1), by: Self.batchSize).map {
++                Array(result.samples[$0..<min($0 + Self.batchSize, result.samples.count)])
++            }
++
++            var accepted = 0, duplicates = 0, rejected = 0
++            var completeness: Double?
++            for (i, batch) in batches.enumerated() {
++                phase = .uploading(done: i, total: batches.count)
++                let request = HealthUploadRequest(device: deviceInfo(), timeZone: TimeZone.current.identifier, enabledCategories: Array(uploadable), samples: batch)
++                let response = try await withRetry { try await api.upload(request) }
++                accepted += response.accepted
++                duplicates += response.duplicates
++                rejected += response.rejected.count
++                completeness = response.snapshot?.completeness ?? completeness
++            }
++            reader.commit(result)
++            record(FitCheckInSyncRecord(finishedAt: Date(), accepted: accepted, duplicates: duplicates, rejected: rejected, completeness: completeness, errorMessage: nil))
++            phase = .success
++        } catch {
++            let message = (error as? FitCheckInError)?.localizedDescription ?? error.localizedDescription
++            record(FitCheckInSyncRecord(finishedAt: Date(), accepted: 0, duplicates: 0, rejected: 0, completeness: nil, errorMessage: message))
++            if case FitCheckInError.notSignedIn = error { session = nil }
++            phase = .failed(message)
++        }
++    }
++
++    /// Exponential backoff (1 s, 2 s, 4 s) for network errors and 5xx/429 only.
++    private func withRetry<T>(_ operation: () async throws -> T) async throws -> T {
++        var attempt = 0
++        while true {
++            do {
++                return try await operation()
++            } catch let error as FitCheckInError where error.isRetryable && attempt < Self.maxAttempts - 1 {
++                attempt += 1
++                try await Task.sleep(nanoseconds: UInt64(pow(2.0, Double(attempt - 1)) * 1_000_000_000))
++            }
++        }
++    }
++
++    private func deviceInfo() -> HealthUploadRequest.Device {
++        #if canImport(UIKit)
++        let name = UIDevice.current.model
++        let os = "\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)"
++        #else
++        let name = "iPhone"
++        let os = ProcessInfo.processInfo.operatingSystemVersionString
++        #endif
++        let app = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
++        return .init(installationId: installationId, name: name, osVersion: os, appVersion: app)
++    }
++
++    private func record(_ r: FitCheckInSyncRecord) {
++        lastSync = r
++        if let data = try? JSONEncoder().encode(r) { UserDefaults.standard.set(data, forKey: Keys.lastSync) }
++    }
++
++    private func persistCategories() {
++        UserDefaults.standard.set(enabledCategories.map(\.rawValue), forKey: Keys.categories)
++        permissionState = .unknown // new types may need a new HealthKit prompt
++    }
++
++    private func configureBackgroundDelivery() {
++        reader.disableBackgroundDelivery()
++        guard backgroundSyncEnabled, session != nil else { return }
++        reader.enableBackgroundDelivery(for: enabledCategories) { [weak self] in
++            await self?.syncNow()
++        }
++    }
++}
+diff --git a/HealthMonitor/Sources/FitCheckInSync/FitCheckInSyncView.swift b/HealthMonitor/Sources/FitCheckInSync/FitCheckInSyncView.swift
+new file mode 100644
+index 0000000..92cfd9a
+--- /dev/null
++++ b/HealthMonitor/Sources/FitCheckInSync/FitCheckInSyncView.swift
+@@ -0,0 +1,163 @@
++import SwiftUI
++
++/// FitCheck-In Sync sheet, opened from the Today screen toolbar.
++struct FitCheckInSyncView: View {
++    @EnvironmentObject private var sync: FitCheckInSyncManager
++    @Environment(\.dismiss) private var dismiss
++    @State private var email = ""
++    @State private var password = ""
++    @State private var signingIn = false
++    @State private var signInError: String?
++    @State private var confirmUnlink = false
++
++    var body: some View {
++        NavigationStack {
++            Form {
++                if !sync.isConfigured {
++                    Section {
++                        Label("FitCheck-In 未配置：请在 Info.plist 设置 FitCheckInSupabaseURL 和 FitCheckInSupabaseAnonKey。", systemImage: "exclamationmark.triangle")
++                            .foregroundStyle(.orange)
++                    }
++                }
++
++                if let session = sync.session {
++                    accountSection(session)
++                    categoriesSection
++                    syncSection
++                    privacySection
++                } else {
++                    signInSection
++                }
++            }
++            .navigationTitle("FitCheck-In Sync")
++            .navigationBarTitleDisplayMode(.inline)
++            .toolbar {
++                ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } }
++            }
++            .confirmationDialog("解绑此设备？", isPresented: $confirmUnlink, titleVisibility: .visible) {
++                Button("解绑并退出登录", role: .destructive) { Task { await sync.unlinkDevice() } }
++            } message: {
++                Text("将停止上传并删除本机的同步记录。已上传到 FitCheck-In 的数据可在网页端“设置 › 隐私与数据”中删除。")
++            }
++        }
++    }
++
++    private var signInSection: some View {
++        Section {
++            TextField("邮箱 Email", text: $email)
++                .textContentType(.username)
++                .keyboardType(.emailAddress)
++                .textInputAutocapitalization(.never)
++                .autocorrectionDisabled()
++            SecureField("密码 Password", text: $password)
++                .textContentType(.password)
++            if let signInError {
++                Text(signInError).font(.footnote).foregroundStyle(.red)
++            }
++            Button {
++                Task {
++                    signingIn = true
++                    signInError = nil
++                    do { try await sync.signIn(email: email, password: password) } catch {
++                        signInError = (error as? FitCheckInError)?.localizedDescription ?? error.localizedDescription
++                    }
++                    signingIn = false
++                }
++            } label: {
++                HStack {
++                    if signingIn { ProgressView() }
++                    Text("登录 FitCheck-In 客户账号")
++                }
++            }
++            .disabled(signingIn || email.isEmpty || password.count < 8 || !sync.isConfigured)
++        } header: {
++            Text("连接 FitCheck-In")
++        } footer: {
++            Text("使用你在 FitCheck-In 网页端注册的客户账号登录。登录凭证保存在本机钥匙串中。")
++        }
++    }
++
++    private func accountSection(_ session: FitCheckInSession) -> some View {
++        Section("账号") {
++            LabeledContent("已登录", value: session.email)
++            Button("解绑此设备", role: .destructive) { confirmUnlink = true }
++        }
++    }
++
++    private var categoriesSection: some View {
++        Section {
++            ForEach(FitCheckInCategory.allCases) { category in
++                Toggle(category.title, isOn: Binding(
++                    get: { sync.enabledCategories.contains(category) },
++                    set: { on in
++                        if on { sync.enabledCategories.insert(category) } else { sync.enabledCategories.remove(category) }
++                    }
++                ))
++            }
++        } header: {
++            Text("上传的数据类型")
++        } footer: {
++            Text("这里控制 iPhone 读取并上传哪些数据。每位教练能看到哪些数据，需要在网页端“设置 › 健康数据共享”中单独授权。")
++        }
++    }
++
++    private var syncSection: some View {
++        Section {
++            Button {
++                Task { await sync.syncNow() }
++            } label: {
++                HStack {
++                    Label("立即同步", systemImage: "arrow.triangle.2.circlepath")
++                    Spacer()
++                    phaseView
++                }
++            }
++            .disabled(isBusy)
++
++            if let last = sync.lastSync {
++                LabeledContent("最近同步", value: last.finishedAt.formatted(date: .abbreviated, time: .shortened))
++                if let error = last.errorMessage {
++                    Text(error).font(.footnote).foregroundStyle(.red)
++                } else {
++                    LabeledContent("新增 / 已存在", value: "\(last.accepted) / \(last.duplicates)")
++                    if last.rejected > 0 { LabeledContent("被拒绝", value: "\(last.rejected)") }
++                    if let c = last.completeness { LabeledContent("数据完整度", value: c.formatted(.percent.precision(.fractionLength(0)))) }
++                }
++            }
++            Toggle("后台自动同步（尽力而为）", isOn: $sync.backgroundSyncEnabled)
++            Button("重新上传最近 30 天") { Task { await sync.syncNow(fullResync: true) } }
++                .disabled(isBusy)
++        } header: {
++            Text("同步")
++        } footer: {
++            Text("后台同步使用 Apple 的 HealthKit 后台传送机制，由 iOS 决定唤醒时机，不保证实时。")
++        }
++    }
++
++    private var privacySection: some View {
++        Section("隐私") {
++            Text("FitCheck-In 只读取你允许的 Apple 健康数据，并通过 HTTPS 上传到你的账号。评分仅为算法估计，不是医学诊断。")
++                .font(.footnote)
++                .foregroundStyle(.secondary)
++            Link("在“健康”App 中管理读取权限", destination: URL(string: "x-apple-health://")!)
++        }
++    }
++
++    private var isBusy: Bool {
++        switch sync.phase {
++        case .authorizing, .reading, .uploading: true
++        default: false
++        }
++    }
++
++    @ViewBuilder private var phaseView: some View {
++        switch sync.phase {
++        case .idle: EmptyView()
++        case .authorizing: Text("授权中…").foregroundStyle(.secondary)
++        case .reading: ProgressView()
++        case .uploading(let done, let total): Text("上传 \(done + 1)/\(total)").foregroundStyle(.secondary)
++        case .success: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
++        case .failed: Image(systemName: "xmark.octagon.fill").foregroundStyle(.red)
++        }
++    }
++}
+diff --git a/HealthMonitor/Sources/FitCheckInSync/README.md b/HealthMonitor/Sources/FitCheckInSync/README.md
+new file mode 100644
+index 0000000..d5bf8f3
+--- /dev/null
++++ b/HealthMonitor/Sources/FitCheckInSync/README.md
+@@ -0,0 +1,42 @@
++# FitCheck-In Sync (iOS bridge)
++
++Independent module that uploads selected Apple Health data to a FitCheck-In account.
++It does **not** change how health+ reads, scores or displays data.
++
++```
++Apple Watch → Apple Health → HealthKit → FitCheckInHealthReader → FitCheckInAPIClient
++            → HTTPS (user JWT) → Supabase Edge Function `health-ingest` → Postgres (RLS) → Web app
++```
++
++| File | Purpose |
++|---|---|
++| `FitCheckInModels.swift` | Wire format (mirrors `supabase/functions/_shared/metrics/health-schema.ts`), errors, sync state |
++| `FitCheckInAPIClient.swift` | Supabase Auth (email+password → JWT, refresh), Keychain session storage, HTTPS upload |
++| `FitCheckInHealthReader.swift` | HealthKit authorization + anchored sample reads (UUID dedupe), daily buckets, background delivery |
++| `FitCheckInSyncManager.swift` | Orchestration: batching (≤1000), retry with backoff, persisted status, device unlink |
++| `FitCheckInSyncView.swift` | SwiftUI sheet opened from the **Today** toolbar (“FitCheck-In” button) |
++
++Integration footprint in existing files: 2 lines in `HealthMonitorApp.swift` (inject manager),
++1 toolbar item + 1 sheet in `TodayDashboardView.swift`, Info.plist keys + background-delivery
++entitlement + xcconfig in `project.yml`.
++
++## Reused from health+
++
++* `HealthPermissionState`, `WorkoutKind` (DomainModels.swift)
++* HealthKit units, sleep-stage semantics and `HKWorkoutActivityType` mapping from `HealthKitService.swift`
++* Scoring: the server runs a test-verified TypeScript port of `DerivedMetricsEngine.swift` (see the FitCheck-In repo).
++
++## Configure
++
++1. `cp Config/FitCheckIn.local.xcconfig.example Config/FitCheckIn.local.xcconfig`
++2. Set `FITCHECKIN_SUPABASE_URL` and `FITCHECKIN_SUPABASE_ANON_KEY` (the **public** anon/publishable key).
++   Never use the service-role / `sb_secret_` key — the app refuses to start sync with it.
++3. `xcodegen generate` (project.yml is the source of truth), open in Xcode, select your team, run on an iPhone.
++   HealthKit is not available in the iOS Simulator for real Apple Watch data.
++
++## Privacy behaviour
++
++* HealthKit read permission (system) and FitCheck-In trainer sharing (web Settings) are separate.
++* Only enabled categories are read and uploaded; the server rejects samples outside them.
++* Anchors are committed only after a successful upload → failed uploads are retried, nothing is skipped.
++* “Unlink device” signs out, clears anchors and stops background delivery. Server-side data is deleted from the web app.
+diff --git a/HealthMonitor/Sources/Views/Today/TodayDashboardView.swift b/HealthMonitor/Sources/Views/Today/TodayDashboardView.swift
+index b3a892d..1125c34 100644
+--- a/HealthMonitor/Sources/Views/Today/TodayDashboardView.swift
++++ b/HealthMonitor/Sources/Views/Today/TodayDashboardView.swift
+@@ -4,6 +4,7 @@ struct TodayDashboardView: View {
+     @EnvironmentObject private var model: AppModel
+     @EnvironmentObject private var layoutStore: DashboardLayoutStore
+     @State private var showWidgetSheet = false
++    @State private var showFitCheckInSync = false
+ 
+     var body: some View {
+         ZStack {
+@@ -32,6 +33,14 @@ struct TodayDashboardView: View {
+         }
+         .navigationTitle("今日")
+         .toolbar {
++            ToolbarItem(placement: .topBarLeading) {
++                Button {
++                    showFitCheckInSync = true
++                } label: {
++                    Label("FitCheck-In", systemImage: "arrow.up.heart")
++                }
++                .accessibilityLabel("FitCheck-In Sync")
++            }
+             ToolbarItem(placement: .topBarTrailing) {
+                 Button("卡片") {
+                     showWidgetSheet = true
+@@ -42,6 +51,9 @@ struct TodayDashboardView: View {
+             WidgetManagementSheet(tab: .today)
+                 .environmentObject(layoutStore)
+         }
++        .sheet(isPresented: $showFitCheckInSync) {
++            FitCheckInSyncView()
++        }
+     }
+ 
+     private var header: some View {
+diff --git a/project.yml b/project.yml
+index 5dadf88..d3d83db 100644
+--- a/project.yml
++++ b/project.yml
+@@ -26,8 +26,14 @@ targets:
+           - UIInterfaceOrientationPortrait
+         NSHealthShareUsageDescription: "health+ 需要读取 Apple 健康和 Apple Watch 里的睡眠、心率、训练、体成分和营养数据，用于生成今日状态、健康年龄、训练负荷、补剂分析和恢复建议。"
+         NSHealthUpdateUsageDescription: "health+ 会在你手动确认时把结构化训练日志写回应用内训练记录，用于保持日志与运动板块同步。"
++        # FitCheck-In Sync — PUBLIC values only (project URL + anon/publishable key). Never a service-role key.
++        FitCheckInSupabaseURL: "$(FITCHECKIN_SUPABASE_URL)"
++        FitCheckInSupabaseAnonKey: "$(FITCHECKIN_SUPABASE_ANON_KEY)"
+     entitlements:
+       path: HealthMonitor/Resources/HealthMonitor.entitlements
++      properties:
++        com.apple.developer.healthkit: true
++        com.apple.developer.healthkit.background-delivery: true
+     settings:
+       base:
+         PRODUCT_BUNDLE_IDENTIFIER: com.zdy.healthmonitor
+@@ -35,8 +41,11 @@ targets:
+         TARGETED_DEVICE_FAMILY: "1"
+         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+         CODE_SIGN_ENTITLEMENTS: HealthMonitor/Resources/HealthMonitor.entitlements
+-        DEVELOPMENT_TEAM: ""
++        DEVELOPMENT_TEAM: VUM9VB77JR
+         SUPPORTS_MACCATALYST: NO
++    configFiles:
++      Debug: Config/FitCheckIn.xcconfig
++      Release: Config/FitCheckIn.xcconfig
+     dependencies:
+       - sdk: HealthKit.framework
+       - sdk: Charts.framework
+@@ -58,6 +67,9 @@ targets:
+           - "*.entitlements"
+     info:
+       path: HealthMonitorWidgets/Resources/Info.plist
++      properties:
++        NSExtension:
++          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+     entitlements:
+       path: HealthMonitorWidgets/Resources/HealthMonitorWidgets.entitlements
+     settings:
+@@ -66,7 +78,7 @@ targets:
+         PRODUCT_NAME: "HealthMonitorWidgets"
+         TARGETED_DEVICE_FAMILY: "1"
+         CODE_SIGN_ENTITLEMENTS: HealthMonitorWidgets/Resources/HealthMonitorWidgets.entitlements
+-        DEVELOPMENT_TEAM: ""
++        DEVELOPMENT_TEAM: VUM9VB77JR
+         APPLICATION_EXTENSION_API_ONLY: YES
+         SKIP_INSTALL: YES
+     dependencies:
+-- 
+2.50.1 (Apple Git-155)
+

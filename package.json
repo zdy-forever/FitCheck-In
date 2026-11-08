@@ -1,0 +1,19 @@
+{
+  "name": "fitcheck-in",
+  "private": true,
+  "version": "0.1.0",
+  "description": "FitCheck-In — bilingual personal-trainer platform (web + Supabase + iOS HealthKit bridge)",
+  "scripts": {
+    "dev": "npm --prefix web run dev",
+    "build": "npm --prefix web run build",
+    "test": "npm --prefix web run test",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:test": "supabase test db",
+    "functions:serve": "supabase functions serve --env-file supabase/functions/.env.local"
+  },
+  "devDependencies": {
+    "supabase": "^3.0.0"
+  }
+}

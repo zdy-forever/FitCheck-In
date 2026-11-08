@@ -1,0 +1,6 @@
+// FitCheck-In Sync configuration (PUBLIC values only).
+// Copy Config/FitCheckIn.local.xcconfig.example to Config/FitCheckIn.local.xcconfig and fill it in.
+// The local file is git-ignored. NEVER put a service_role / sb_secret_ key here.
+FITCHECKIN_SUPABASE_URL = https:/$()/YOUR-PROJECT.supabase.co
+FITCHECKIN_SUPABASE_ANON_KEY =
+#include? "FitCheckIn.local.xcconfig"

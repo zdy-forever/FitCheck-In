@@ -1,0 +1,37 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: npm ci
+      - run: npm ci
+        working-directory: web
+      - name: Typecheck + unit tests (incl. Swift golden-vector equivalence)
+        working-directory: web
+        run: npm run typecheck && npm test
+      - name: Build
+        working-directory: web
+        run: npm run build
+        env: { VITE_SUPABASE_URL: http://127.0.0.1:54321, VITE_SUPABASE_ANON_KEY: ci-placeholder }
+      - name: Start Supabase (Postgres, Auth, Realtime, Edge Functions)
+        run: npx supabase start -x storage-api,imgproxy,studio,logflare,vector,supavisor
+      - name: Database RLS tests (pgTAP)
+        run: npx supabase test db
+      - name: Edge functions + integration tests
+        run: |
+          echo "DEMO_MODE_ENABLED=true" > supabase/functions/.env.local
+          npx supabase functions serve --env-file supabase/functions/.env.local &
+          sleep 8
+          export SUPABASE_ANON_KEY=$(npx supabase status -o env | grep '^ANON_KEY=' | cut -d= -f2- | tr -d '"')
+          cd web && npm run test:integration
+      - name: E2E (Playwright)
+        run: |
+          export ANON=$(npx supabase status -o env | grep '^ANON_KEY=' | cut -d= -f2- | tr -d '"')
+          cd web
+          printf "VITE_SUPABASE_URL=http://127.0.0.1:54321\nVITE_SUPABASE_ANON_KEY=%s\nVITE_DEMO_MODE=true\n" "$ANON" > .env.local
+          npx playwright install --with-deps chromium
+          npm run test:e2e

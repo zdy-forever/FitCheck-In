@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    "types": [
+      "vite/client",
+      "node",
+      "@testing-library/jest-dom"
+    ],
+    "resolveJsonModule": true
+  },
+  "include": [
+    "src",
+    "tests",
+    "../supabase/functions/_shared/metrics"
+  ]
+}

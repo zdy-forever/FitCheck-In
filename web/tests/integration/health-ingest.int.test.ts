@@ -1,0 +1,246 @@
+/**
+ * Integration tests against a running local Supabase stack:
+ *   npx supabase start && npx supabase functions serve --env-file supabase/functions/.env.local
+ *   npm --prefix web run test:integration
+ *
+ * Uses only the publishable/anon key, exactly like the web app and iOS bridge.
+ */
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { beforeAll, describe, expect, it } from "vitest"
+
+const URL = process.env.SUPABASE_URL ?? 'http://127.0.0.1:54321'
+const ANON = process.env.SUPABASE_ANON_KEY ?? ''
+const FN = `${URL}/functions/v1/health-ingest`
+
+const uid = () => Math.random().toString(36).slice(2, 10)
+const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString()
+const H = 3_600_000
+
+async function signUp(role: 'trainer' | 'client', tz = 'Australia/Sydney') {
+  const client = createClient(URL, ANON, { auth: { persistSession: false, autoRefreshToken: false } })
+  const email = `${role}-${uid()}@int.test`
+  const { data, error } = await client.auth.signUp({
+    email,
+    password: 'Integration-Test-1!',
+    options: { data: { role, display_name: `${role} ${uid()}`, time_zone: tz } },
+  })
+  if (error || !data.session) throw new Error(`signup failed: ${error?.message}`)
+  return { client, token: data.session.access_token, userId: data.user!.id }
+}
+
+async function ingest(token: string | null, body: unknown) {
+  const res = await fetch(FN, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: ANON, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body),
+  })
+  return { status: res.status, body: (await res.json()) as Record<string, unknown> }
+}
+
+const device = { installationId: '6f1c1d8e-2b1e-4d0e-9a5a-0c0a5c1e9b01', name: 'Test iPhone', osVersion: '26.1', appVersion: '1.0' }
+
+function corePayload(enabled = ['hrv', 'resting_heart_rate', 'sleep', 'activity', 'workouts', 'scores']) {
+  const samples = [] as Record<string, unknown>[]
+  // 7 days of HRV + RHR for baselines
+  for (let d = 0; d < 7; d++) {
+    samples.push({ sampleId: `hrv-${d}`, metricType: 'hrv_sdnn', value: 50 + d, unit: 'ms', startAt: iso(d * 24 * H + 2 * H), measuredAt: iso(d * 24 * H + 2 * H) })
+    samples.push({ sampleId: `rhr-${d}`, metricType: 'resting_heart_rate', value: 55 + (d % 3), unit: 'bpm', startAt: iso(d * 24 * H + 2 * H), measuredAt: iso(d * 24 * H + 2 * H) })
+  }
+  // Last night: sleep stages ending 3 h ago
+  samples.push({ sampleId: 'sl-core', metricType: 'sleep_analysis', value: 4, unit: 'h', startAt: iso(10 * H), measuredAt: iso(6 * H), category: 'asleepCore' })
+  samples.push({ sampleId: 'sl-deep', metricType: 'sleep_analysis', value: 1.2, unit: 'h', startAt: iso(6 * H), measuredAt: iso(4.8 * H), category: 'asleepDeep' })
+  samples.push({ sampleId: 'sl-rem', metricType: 'sleep_analysis', value: 1.8, unit: 'h', startAt: iso(4.8 * H), measuredAt: iso(3 * H), category: 'asleepREM' })
+  samples.push({ sampleId: 'wk-1', metricType: 'workout', value: 50, unit: 'min', startAt: iso(30 * H), measuredAt: iso(29 * H), category: 'strength', metadata: { averageHeartRate: 128, maxHeartRate: 160, energyKCal: 320 } })
+  return { schemaVersion: 1, device, timeZone: 'Australia/Sydney', enabledCategories: enabled, samples }
+}
+
+describe.skipIf(!ANON)('health-ingest Edge Function (live local stack)', () => {
+  let client: Awaited<ReturnType<typeof signUp>>
+
+  beforeAll(async () => {
+    client = await signUp('client')
+  })
+
+  it('rejects requests without a token', async () => {
+    const r = await ingest(null, corePayload())
+    expect(r.status).toBe(401)
+  })
+
+  it('rejects forged tokens', async () => {
+    const r = await ingest('eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.bad', corePayload())
+    expect(r.status).toBe(401)
+  })
+
+  it('rejects trainer uploads', async () => {
+    const trainer = await signUp('trainer')
+    const r = await ingest(trainer.token, corePayload())
+    expect(r.status).toBe(403)
+    expect(r.body.error).toBe('only_clients_can_upload')
+  })
+
+  it('stores samples and computes a snapshot', async () => {
+    const r = await ingest(client.token, corePayload())
+    expect(r.status).toBe(200)
+    expect(r.body.accepted).toBe(18)
+    expect(r.body.duplicates).toBe(0)
+    expect(r.body.rejected).toEqual([])
+    const snap = r.body.snapshot as { completeness: number; algorithmVersion: string }
+    expect(snap.algorithmVersion).toMatch(/^fitcheck-readiness@/)
+    expect(snap.completeness).toBe(1)
+
+    const { data } = await client.client.auth.setSession({ access_token: client.token, refresh_token: 'x' }).then(() =>
+      client.client.from('health_snapshots').select('assessment').single(),
+    )
+    const a = (data as { assessment: { scores: { readiness: { value: number | null; status: string } } } }).assessment
+    expect(a.scores.readiness.status).toBe('ok')
+    expect(typeof a.scores.readiness.value).toBe('number')
+  })
+
+  it('is idempotent: re-uploading the same samples creates no duplicates', async () => {
+    const r = await ingest(client.token, corePayload())
+    expect(r.status).toBe(200)
+    expect(r.body.accepted).toBe(0)
+    expect(r.body.duplicates).toBe(18)
+    const authed = createClient(URL, ANON, { global: { headers: { Authorization: `Bearer ${client.token}` } }, auth: { persistSession: false } })
+    const { count } = await authed.from('health_samples').select('id', { count: 'exact', head: true })
+    expect(count).toBe(18)
+  })
+
+  it('rejects invalid samples individually without failing the batch', async () => {
+    const p = corePayload()
+    p.samples = [
+      { sampleId: 'bad-unit', metricType: 'hrv_sdnn', value: 0.05, unit: 's', startAt: iso(H), measuredAt: iso(H) },
+      { sampleId: 'bad-range', metricType: 'resting_heart_rate', value: 900, unit: 'bpm', startAt: iso(H), measuredAt: iso(H) },
+      { sampleId: 'future', metricType: 'hrv_sdnn', value: 40, unit: 'ms', startAt: iso(-5 * H), measuredAt: iso(-5 * H) },
+      { sampleId: 'not-enabled', metricType: 'vo2_max', value: 45, unit: 'mL/kg/min', startAt: iso(H), measuredAt: iso(H) },
+      { sampleId: 'ok-new', metricType: 'hrv_sdnn', value: 61, unit: 'ms', startAt: iso(H), measuredAt: iso(H) },
+    ]
+    const r = await ingest(client.token, p)
+    expect(r.status).toBe(200)
+    expect(r.body.accepted).toBe(1)
+    expect((r.body.rejected as Array<{ reason: string }>).map((x) => x.reason)).toEqual([
+      'unit_mismatch',
+      'value_out_of_range',
+      'time_in_future',
+      'category_not_enabled',
+    ])
+  })
+
+  it('rejects unsupported schema versions', async () => {
+    const r = await ingest(client.token, { ...corePayload(), schemaVersion: 99 })
+    expect(r.status).toBe(400)
+  })
+
+  it('withholds scores when core inputs are missing (no fake precision)', async () => {
+    const fresh = await signUp('client')
+    const r = await ingest(fresh.token, {
+      schemaVersion: 1,
+      device: { ...device, installationId: '6f1c1d8e-2b1e-4d0e-9a5a-0c0a5c1e9b02' },
+      timeZone: 'Australia/Sydney',
+      enabledCategories: ['activity', 'scores'],
+      samples: [{ sampleId: 'steps-today', metricType: 'step_count', value: 4000, unit: 'count', startAt: iso(5 * H), measuredAt: iso(H) }],
+    })
+    expect(r.status).toBe(200)
+    const authed = createClient(URL, ANON, { global: { headers: { Authorization: `Bearer ${fresh.token}` } }, auth: { persistSession: false } })
+    const { data } = await authed.from('health_snapshots').select('assessment').single()
+    const a = (data as { assessment: { scores: Record<string, { value: number | null; status: string }>; defaultedInputs: string[] } }).assessment
+    expect(a.scores.readiness).toEqual({ value: null, status: 'insufficient' })
+    expect(a.scores.recovery?.value).toBeNull()
+    expect(a.scores.stress?.value).toBeNull()
+    expect(a.defaultedInputs).toContain('hrv')
+  })
+
+  it('trainer sees only granted categories, and loses access when revoked', async () => {
+    const trainer = await signUp('trainer')
+    const tc = createClient(URL, ANON, { global: { headers: { Authorization: `Bearer ${trainer.token}` } }, auth: { persistSession: false } })
+    const cc = createClient(URL, ANON, { global: { headers: { Authorization: `Bearer ${client.token}` } }, auth: { persistSession: false } })
+
+    const { data: inv, error: invErr } = await tc.from('trainer_invitations').insert({ trainer_id: trainer.userId }).select('code').single()
+    expect(invErr).toBeNull()
+    const { error: accErr } = await cc.rpc('accept_invitation', { p_code: inv!.code, p_share: ['hrv', 'scores'] })
+    expect(accErr).toBeNull()
+
+    const { data: visible } = await tc.from('health_samples').select('metric_type').eq('user_id', client.userId)
+    expect(new Set(visible!.map((v) => v.metric_type))).toEqual(new Set(['hrv_sdnn']))
+    const { data: snaps } = await tc.from('health_snapshots').select('id').eq('user_id', client.userId)
+    expect(snaps).toHaveLength(1)
+
+    await cc.from('health_sharing_permissions').update({ granted: false }).eq('trainer_id', trainer.userId)
+    const { data: after } = await tc.from('health_samples').select('metric_type').eq('user_id', client.userId)
+    expect(after).toEqual([])
+    const { data: snapsAfter } = await tc.from('health_snapshots').select('id').eq('user_id', client.userId)
+    expect(snapsAfter).toEqual([])
+  })
+
+  it('client can delete all stored health data', async () => {
+    const cc = createClient(URL, ANON, { global: { headers: { Authorization: `Bearer ${client.token}` } }, auth: { persistSession: false } })
+    const { data, error } = await cc.rpc('delete_my_health_data')
+    expect(error).toBeNull()
+    expect((data as { samples: number }).samples).toBeGreaterThan(0)
+    const { count } = await cc.from('health_samples').select('id', { count: 'exact', head: true })
+    expect(count).toBe(0)
+  })
+})
+
+describe.skipIf(!ANON)('demo-session Edge Function', () => {
+  let demo: { trainer: { email: string; password: string }; client: { email: string; password: string } }
+
+  it('creates an isolated demo workspace', async () => {
+    const res = await fetch(`${URL}/functions/v1/demo-session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: ANON },
+      body: JSON.stringify({ locale: 'en', timeZone: 'Australia/Sydney' }),
+    })
+    expect(res.status).toBe(200)
+    demo = await res.json()
+    expect(demo.trainer.email).toMatch(/@demo\.fitcheck-in\.invalid$/)
+  })
+
+  it('demo trainer sees demo client data, labelled as demo', async () => {
+    const c = createClient(URL, ANON, { auth: { persistSession: false } }) as SupabaseClient
+    const { error } = await c.auth.signInWithPassword(demo.trainer)
+    expect(error).toBeNull()
+    const { data: overview } = await c.rpc('trainer_client_overview')
+    expect(overview).toHaveLength(1)
+    const { data: snap } = await c.from('health_snapshots').select('origin, assessment').single()
+    expect(snap!.origin).toBe('demo')
+    const { data: samples } = await c.from('health_samples').select('origin').limit(5)
+    expect(samples!.every((s) => s.origin === 'demo')).toBe(true)
+  })
+
+  it('a real client cannot accept a demo trainer invitation', async () => {
+    const c = createClient(URL, ANON, { auth: { persistSession: false } })
+    await c.auth.signInWithPassword(demo.trainer)
+    const { data: inv } = await c.from('trainer_invitations').select('code').eq('status', 'pending').limit(1).single()
+    const real = await signUp('client')
+    const rc = createClient(URL, ANON, { global: { headers: { Authorization: `Bearer ${real.token}` } }, auth: { persistSession: false } })
+    const { error } = await rc.rpc('accept_invitation', { p_code: inv!.code })
+    expect(error?.message).toBe('demo_mismatch')
+  })
+
+  it('demo accounts cannot upload real HealthKit data', async () => {
+    const c = createClient(URL, ANON, { auth: { persistSession: false } })
+    const { data } = await c.auth.signInWithPassword(demo.client)
+    const r = await ingest(data.session!.access_token, corePayload())
+    expect(r.status).toBe(403)
+    expect(r.body.error).toBe('demo_accounts_cannot_upload')
+  })
+})
+
+describe.skipIf(!ANON)('Swift-encoded upload (bytes produced by the iOS models)', () => {
+  it('the Edge Function accepts the exact JSON the iOS app sends', async () => {
+    const { readFileSync } = await import('node:fs')
+    const raw = JSON.parse(readFileSync(new globalThis.URL('../fixtures/swift-upload-request.json', import.meta.url), 'utf8'))
+    // Shift sample times to "now" so they pass the freshness window, keep everything else byte-for-byte.
+    const shift = Date.now() - Date.parse('2026-11-08T03:00:00Z')
+    for (const s of raw.samples) {
+      s.startAt = new Date(Date.parse(s.startAt) + shift).toISOString()
+      s.measuredAt = new Date(Date.parse(s.measuredAt) + shift).toISOString()
+    }
+    const c = await signUp('client')
+    const r = await ingest(c.token, raw)
+    expect(r.status).toBe(200)
+    expect(r.body.accepted).toBe(3)
+    expect(r.body.rejected).toEqual([])
+  })
+})
