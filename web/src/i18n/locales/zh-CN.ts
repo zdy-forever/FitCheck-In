@@ -240,6 +240,16 @@ const zhCN: Translation = {
     latest: '最新问卷',
     noneYet: '暂无问卷。',
     subjective: '主观感受（自我报告）',
+    watch: {
+      title: '可使用 Apple Watch 数据',
+      body: '用今天的手表数据填写睡眠质量和精力水平，四舍五入到整数档；与实际感受不符可直接修改。数据更新：{{time}}',
+      use: '使用 Apple Watch 数据',
+      applied: '已填入 · 重新填入',
+      simulated: '模拟数据',
+      fromSleep: '来自 Apple Watch：睡眠分 {{score}}/100 → {{exact}} → 四舍五入为 {{value}}',
+      fromRecovery: '来自 Apple Watch：恢复分 {{score}}/100 → {{exact}} → 四舍五入为 {{value}}',
+      badge: '来自手表',
+    },
   },
   areas: {
     neck: '颈部',

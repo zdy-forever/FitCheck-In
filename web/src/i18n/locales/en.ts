@@ -239,6 +239,16 @@ const en = {
     latest: 'Latest check-in',
     noneYet: 'No check-ins yet.',
     subjective: 'How they feel (self-reported)',
+    watch: {
+      title: 'Apple Watch data available',
+      body: 'Fill sleep quality and energy from today’s readings, rounded to the nearest step — change them if they don’t match how you feel. Data updated: {{time}}',
+      use: 'Use Apple Watch data',
+      applied: 'Applied · use again',
+      simulated: 'Simulated',
+      fromSleep: 'From Apple Watch: sleep score {{score}}/100 → {{exact}} → rounded to {{value}}',
+      fromRecovery: 'From Apple Watch: recovery {{score}}/100 → {{exact}} → rounded to {{value}}',
+      badge: 'From watch',
+    },
   },
   areas: {
     neck: 'Neck',

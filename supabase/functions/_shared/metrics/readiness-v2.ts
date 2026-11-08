@@ -72,7 +72,9 @@ export interface V2Input {
   /** Training load from workouts, if any were recorded in the last 28 days. */
   load?: { acute7: number; chronicWeekly: number } | null
   /** Most recent same-day pre-session check-in, if any. */
-  checkin?: { energy: number; sleepQuality: number; soreness: number; pain: number } | null
+  /** `energy` / `sleepQuality` are null when the answer was pre-filled from the watch (it would
+   *  re-count HRV / sleep, which recovery already uses). */
+  checkin?: { energy: number | null; sleepQuality: number | null; soreness: number; pain: number } | null
 }
 
 export interface SignalDetail {
@@ -191,8 +193,8 @@ export function computeReadinessV2(input: V2Input): V2Result {
   const c = input.checkin
   if (c) {
     const parts: Driver[] = [
-      { key: 'checkinEnergy', impact: (c.energy - 3) * 3 }, // 1..5 → −6..+6
-      { key: 'checkinSleep', impact: (c.sleepQuality - 3) * 2 }, // −4..+4
+      { key: 'checkinEnergy', impact: c.energy === null ? 0 : (c.energy - 3) * 3 }, // 1..5 → −6..+6
+      { key: 'checkinSleep', impact: c.sleepQuality === null ? 0 : (c.sleepQuality - 3) * 2 }, // −4..+4
       { key: 'checkinSoreness', impact: -Math.max(0, c.soreness - 3) * 1.2 }, // 0..−8.4
       { key: 'checkinPain', impact: -Math.max(0, c.pain - 1) * 1.5 }, // 0..−13.5
     ]

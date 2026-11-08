@@ -90,6 +90,17 @@ describe('readiness v2 — fixes to the health+ composite', () => {
     expect(r.usedCheckin).toBe(true)
   })
 
+  it('answers pre-filled from the watch (null) do not re-count HRV/sleep; soreness and pain still count', () => {
+    const base = { today: { hrv: 50, rhr: 56, sleepHours: 7.4 }, history: person(50, 56) }
+    const self = computeReadinessV2({ ...base, checkin: { energy: 5, sleepQuality: 5, soreness: 0, pain: 0 } })
+    const watch = computeReadinessV2({ ...base, checkin: { energy: null, sleepQuality: null, soreness: 0, pain: 0 } })
+    expect(watch.readiness.value).toBe(watch.recovery.value)
+    expect(self.readiness.value!).toBeGreaterThan(watch.readiness.value!)
+    expect(watch.drivers.map((d) => d.key)).not.toEqual(expect.arrayContaining(['checkinEnergy']))
+    const hurt = computeReadinessV2({ ...base, checkin: { energy: null, sleepQuality: null, soreness: 8, pain: 6 } })
+    expect(hurt.readiness.value!).toBeLessThan(hurt.recovery.value!)
+  })
+
   it('with no wearable data, a check-in alone gives a clearly limited readiness', () => {
     const r = computeReadinessV2({ today: {}, history: { hrv: [], rhr: [], sleepHours: [] }, checkin: { energy: 4, sleepQuality: 4, soreness: 2, pain: 0 } })
     expect(r.readiness.status).toBe('limited')

@@ -155,14 +155,14 @@ isOneToOne: false
                   ]
                 },"pre_session_checkins": {
                   Row: {
-                    "client_id": string,"created_at": string,"energy_level": number,"id": string,"mental_state": number,"muscle_soreness": number,"notes": string | null,"pain_areas": (string)[],"pain_level": number,"reviewed_at": string | null,"session_id": string | null,"sleep_quality": number,"trainer_id": string,"training_goal": string,"updated_at": string
+                    "client_id": string,"created_at": string,"energy_level": number,"id": string,"mental_state": number,"muscle_soreness": number,"notes": string | null,"pain_areas": (string)[],"pain_level": number,"reviewed_at": string | null,"session_id": string | null,"sleep_quality": number,"trainer_id": string,"training_goal": string,"updated_at": string,"watch_prefilled": (string)[]
                   }
                   ComputedFields: never
                   Insert: {
-                    "client_id": string,"created_at"?: string,"energy_level": number,"id"?: string,"mental_state": number,"muscle_soreness": number,"notes"?: string | null,"pain_areas"?: (string)[],"pain_level": number,"reviewed_at"?: string | null,"session_id"?: string | null,"sleep_quality": number,"trainer_id": string,"training_goal": string,"updated_at"?: string
+                    "client_id": string,"created_at"?: string,"energy_level": number,"id"?: string,"mental_state": number,"muscle_soreness": number,"notes"?: string | null,"pain_areas"?: (string)[],"pain_level": number,"reviewed_at"?: string | null,"session_id"?: string | null,"sleep_quality": number,"trainer_id": string,"training_goal": string,"updated_at"?: string,"watch_prefilled"?: (string)[]
                   }
                   Update: {
-                    "client_id"?: string,"created_at"?: string,"energy_level"?: number,"id"?: string,"mental_state"?: number,"muscle_soreness"?: number,"notes"?: string | null,"pain_areas"?: (string)[],"pain_level"?: number,"reviewed_at"?: string | null,"session_id"?: string | null,"sleep_quality"?: number,"trainer_id"?: string,"training_goal"?: string,"updated_at"?: string
+                    "client_id"?: string,"created_at"?: string,"energy_level"?: number,"id"?: string,"mental_state"?: number,"muscle_soreness"?: number,"notes"?: string | null,"pain_areas"?: (string)[],"pain_level"?: number,"reviewed_at"?: string | null,"session_id"?: string | null,"sleep_quality"?: number,"trainer_id"?: string,"training_goal"?: string,"updated_at"?: string,"watch_prefilled"?: (string)[]
                   }
                   Relationships: [
                     {

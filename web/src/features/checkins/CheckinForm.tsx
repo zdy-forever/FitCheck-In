@@ -1,15 +1,16 @@
 import { clsx } from 'clsx'
-import { AlertTriangle, CheckCircle2, Send } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Send, Watch } from 'lucide-react'
 import { motion } from 'motion/react'
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/Button'
 import { SelectField, TextArea } from '@/components/ui/Field'
 import { Scale } from '@/components/ui/Scale'
 import { useToast } from '@/components/ui/Toast'
-import { api, type RelationshipWithPeer, type SessionWithDetails } from '@/lib/api'
+import { api, type RelationshipWithPeer, type SessionWithDetails, type Snapshot } from '@/lib/api'
 import { errorKey } from '@/lib/errors'
 import { useFormatters } from '@/lib/format'
+import { watchPrefill, type WatchPrefill } from './watchPrefill'
 
 export const PAIN_AREAS = ['neck', 'shoulder_left', 'shoulder_right', 'upper_back', 'lower_back', 'elbow', 'wrist', 'hip', 'knee_left', 'knee_right', 'ankle', 'other'] as const
 
@@ -43,17 +44,26 @@ export function validateCheckin(v: CheckinValues): Partial<Record<keyof CheckinV
   return e
 }
 
-export function CheckinForm({
-  clientId,
-  relationships,
-  sessions,
-  onSubmitted,
-}: {
+interface CheckinFormProps {
   clientId: string
   relationships: RelationshipWithPeer[]
   sessions: SessionWithDetails[]
+  /** Today's own health snapshot; enables "Use Apple Watch data" when it has usable scores. */
+  snapshot?: Snapshot | null
   onSubmitted?: () => void
-}) {
+}
+
+/**
+ * After a successful submit the form shows a confirmation; "Back" starts a brand-new, empty
+ * check-in. The answers live in component state, so bumping `key` remounts the form and
+ * drops them — nothing from the previous check-in is carried over.
+ */
+export function CheckinForm(props: CheckinFormProps) {
+  const [round, setRound] = useState(0)
+  return <CheckinFormInner key={round} {...props} onRestart={() => setRound((r) => r + 1)} />
+}
+
+function CheckinFormInner({ clientId, relationships, sessions, snapshot, onSubmitted, onRestart }: CheckinFormProps & { onRestart: () => void }) {
   const { t, i18n } = useTranslation()
   const f = useFormatters(i18n.language)
   const toast = useToast()
@@ -81,9 +91,33 @@ export function CheckinForm({
   const [errors, setErrors] = useState<ReturnType<typeof validateCheckin>>({})
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
+  const prefill = useMemo<WatchPrefill | null>(() => watchPrefill(snapshot), [snapshot])
+  /** Fields currently holding the watch-suggested value (cleared as soon as the client changes one). */
+  const [fromWatch, setFromWatch] = useState<Set<'sleep' | 'energy'>>(new Set())
+  const submittingRef = useRef(false)
   const set = <K extends keyof CheckinValues>(k: K, val: CheckinValues[K]) => {
     setV((p) => ({ ...p, [k]: val }))
     if (errors[k]) setErrors((e) => ({ ...e, [k]: undefined }))
+    if ((k === 'sleep' || k === 'energy') && fromWatch.has(k)) {
+      setFromWatch((s) => {
+        const n = new Set(s)
+        n.delete(k)
+        return n
+      })
+    }
+  }
+  const applyWatch = () => {
+    if (!prefill) return
+    const next: Partial<CheckinValues> = {}
+    for (const sug of prefill.suggestions) next[sug.field] = sug.value
+    setV((p) => ({ ...p, ...next }))
+    setErrors((e) => ({ ...e, sleep: next.sleep !== undefined ? undefined : e.sleep, energy: next.energy !== undefined ? undefined : e.energy }))
+    setFromWatch(new Set(prefill.suggestions.map((x) => x.field)))
+  }
+  const watchHint = (field: 'sleep' | 'energy') => {
+    const sug = prefill?.suggestions.find((x) => x.field === field)
+    if (!sug || !fromWatch.has(field)) return undefined
+    return t(field === 'sleep' ? 'checkin.watch.fromSleep' : 'checkin.watch.fromRecovery', { score: sug.score, exact: sug.exact, value: sug.value })
   }
   const err = (k: keyof CheckinValues) => (errors[k] ? t(errors[k]!.key, errors[k]!.params ?? {}) : null)
   const trainerName = active.find((r) => r.trainer_id === v.trainerId)?.peer?.display_name ?? ''
@@ -98,6 +132,8 @@ export function CheckinForm({
       first?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
+    if (submittingRef.current) return
+    submittingRef.current = true
     setSubmitting(true)
     try {
       await api.submitCheckin({
@@ -113,6 +149,7 @@ export function CheckinForm({
         mental_state: v.mental!,
         training_goal: v.goal.trim(),
         notes: v.notes.trim() || null,
+        watch_prefilled: [...fromWatch].map((f) => (f === 'sleep' ? 'sleep_quality' : 'energy_level')),
       })
       toast.success(t('checkin.success', { trainer: trainerName }))
       setDone(true)
@@ -120,6 +157,7 @@ export function CheckinForm({
     } catch (er) {
       toast.error(t(errorKey(er)))
     } finally {
+      submittingRef.current = false
       setSubmitting(false)
     }
   }
@@ -131,7 +169,7 @@ export function CheckinForm({
           <CheckCircle2 className="size-16 text-good" aria-hidden />
         </motion.div>
         <p className="text-lg font-semibold text-ink">{t('checkin.success', { trainer: trainerName })}</p>
-        <Button variant="secondary" onClick={() => setDone(false)}>
+        <Button variant="secondary" onClick={onRestart} data-testid="checkin-again">
           {t('common.back')}
         </Button>
       </motion.div>
@@ -161,8 +199,27 @@ export function CheckinForm({
       </div>
 
       <div className="card flex flex-col gap-7 p-5 sm:p-6">
-        <Scale name="sleep" label={t('checkin.sleepQuality')} min={1} max={5} value={v.sleep} onChange={(x) => set('sleep', x)} labels={t('checkin.scale.sleep', { returnObjects: true }) as string[]} error={err('sleep')} />
-        <Scale name="energy" label={t('checkin.energy')} min={1} max={5} value={v.energy} onChange={(x) => set('energy', x)} labels={t('checkin.scale.energy', { returnObjects: true }) as string[]} error={err('energy')} />
+        {prefill && (
+          <div className="flex flex-col gap-3 rounded-2xl border border-line bg-sunken p-4 sm:flex-row sm:items-center sm:justify-between" data-testid="watch-prefill">
+            <div className="flex items-start gap-3">
+              <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent">
+                <Watch className="size-5" aria-hidden />
+              </div>
+              <div className="text-sm">
+                <p className="font-medium text-ink">
+                  {t('checkin.watch.title')}
+                  {prefill.simulated && <span className="ml-2 rounded-full bg-warn-soft px-2 py-0.5 text-2xs font-medium text-warn">{t('checkin.watch.simulated')}</span>}
+                </p>
+                <p className="text-ink-3">{t('checkin.watch.body', { time: f.relative(prefill.computedAt) })}</p>
+              </div>
+            </div>
+            <Button type="button" size="sm" variant="secondary" className="shrink-0" onClick={applyWatch} icon={<Watch className="size-4" aria-hidden />} data-testid="use-watch-data">
+              {fromWatch.size > 0 ? t('checkin.watch.applied') : t('checkin.watch.use')}
+            </Button>
+          </div>
+        )}
+        <Scale name="sleep" label={t('checkin.sleepQuality')} min={1} max={5} value={v.sleep} onChange={(x) => set('sleep', x)} labels={t('checkin.scale.sleep', { returnObjects: true }) as string[]} hint={watchHint('sleep')} error={err('sleep')} />
+        <Scale name="energy" label={t('checkin.energy')} min={1} max={5} value={v.energy} onChange={(x) => set('energy', x)} labels={t('checkin.scale.energy', { returnObjects: true }) as string[]} hint={watchHint('energy')} error={err('energy')} />
         <Scale name="mental" label={t('checkin.mental')} min={1} max={5} value={v.mental} onChange={(x) => set('mental', x)} labels={t('checkin.scale.mental', { returnObjects: true }) as string[]} error={err('mental')} />
         <Scale name="soreness" tone="severity" label={t('checkin.soreness')} min={0} max={10} value={v.soreness} onChange={(x) => set('soreness', x)} hint={t('checkin.scale.soreness')} error={err('soreness')} />
         <Scale name="pain" tone="severity" label={t('checkin.pain')} min={0} max={10} value={v.pain} onChange={(x) => set('pain', x)} hint={t('checkin.scale.pain')} error={err('pain')} />

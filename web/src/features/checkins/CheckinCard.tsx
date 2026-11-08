@@ -1,5 +1,5 @@
 import { clsx } from 'clsx'
-import { Activity, BedDouble, Brain, CheckCircle2, Clock, Flame, Waves } from 'lucide-react'
+import { Activity, BedDouble, Brain, CheckCircle2, Clock, Flame, Waves, Watch } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/Badge'
@@ -39,8 +39,8 @@ export function CheckinCard({ checkin, canReview, compact, highlight }: { checki
   }
 
   const metrics = [
-    { Icon: BedDouble, label: t('checkin.sleepQuality'), value: `${checkin.sleep_quality}/5`, sub: (t('checkin.scale.sleep', { returnObjects: true }) as string[])[checkin.sleep_quality - 1] },
-    { Icon: Flame, label: t('checkin.energy'), value: `${checkin.energy_level}/5`, sub: (t('checkin.scale.energy', { returnObjects: true }) as string[])[checkin.energy_level - 1] },
+    { Icon: BedDouble, label: t('checkin.sleepQuality'), value: `${checkin.sleep_quality}/5`, sub: (t('checkin.scale.sleep', { returnObjects: true }) as string[])[checkin.sleep_quality - 1], watch: checkin.watch_prefilled?.includes('sleep_quality') },
+    { Icon: Flame, label: t('checkin.energy'), value: `${checkin.energy_level}/5`, sub: (t('checkin.scale.energy', { returnObjects: true }) as string[])[checkin.energy_level - 1], watch: checkin.watch_prefilled?.includes('energy_level') },
     { Icon: Brain, label: t('checkin.mental'), value: `${checkin.mental_state}/5`, sub: (t('checkin.scale.mental', { returnObjects: true }) as string[])[checkin.mental_state - 1] },
     { Icon: Activity, label: t('checkin.soreness'), value: `${checkin.muscle_soreness}/10`, warn: checkin.muscle_soreness >= 7 },
     { Icon: Waves, label: t('checkin.pain'), value: `${checkin.pain_level}/10`, warn: checkin.pain_level >= 4 },
@@ -72,13 +72,16 @@ export function CheckinCard({ checkin, canReview, compact, highlight }: { checki
       </header>
       <p className="mb-1 text-2xs font-medium uppercase tracking-wider text-ink-3">{t('checkin.subjective')}</p>
       <div className={clsx('grid gap-2', compact ? 'grid-cols-5' : 'grid-cols-2 sm:grid-cols-5')}>
-        {metrics.map(({ Icon, label, value, sub, warn }) => (
+        {metrics.map(({ Icon, label, value, sub, warn, watch }) => (
           <div key={label} className={clsx('rounded-xl p-2.5', warn ? 'bg-warn-soft' : 'bg-sunken')}>
             <div className="flex items-center gap-1.5 text-2xs text-ink-3">
               <Icon className="size-3.5 shrink-0" aria-hidden />
               <span className="truncate">{label}</span>
             </div>
-            <div className={clsx('mt-0.5 font-semibold tabular', warn ? 'text-warn' : 'text-ink')}>{value}</div>
+            <div className={clsx('mt-0.5 flex items-center gap-1 font-semibold tabular', warn ? 'text-warn' : 'text-ink')}>
+              {value}
+              {watch && <Watch className="size-3.5 text-accent" aria-label={t('checkin.watch.badge')} data-testid="watch-derived" />}
+            </div>
             {!compact && sub && <div className="truncate text-2xs text-ink-3">{sub}</div>}
           </div>
         ))}

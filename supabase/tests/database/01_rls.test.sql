@@ -1,7 +1,7 @@
 -- pgTAP Row Level Security tests. Run with: npx supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(80);
+select plan(82);
 
 -- ─────────────────────────── fixtures (as superuser) ─────────────────
 -- Users are created through auth.users so the real handle_new_user trigger runs.
@@ -138,6 +138,9 @@ select throws_ok($$insert into public.pre_session_checkins (client_id, trainer_i
 select throws_ok($$insert into public.pre_session_checkins (client_id, trainer_id, sleep_quality, energy_level, muscle_soreness, pain_level, mental_state, training_goal)
   values ('00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000a1', 3, 3, 2, 0, 4, 'spoof')$$, '42501', null, 'cannot submit a check-in as someone else');
 select throws_ok($$update public.pre_session_checkins set reviewed_at = now()$$, '42501', null, 'client cannot mark own check-in reviewed');
+select lives_ok($$update public.pre_session_checkins set watch_prefilled = '{sleep_quality,energy_level}'$$, 'client can mark answers as pre-filled from the watch');
+select throws_ok($$update public.pre_session_checkins set watch_prefilled = '{pain_level}'$$, '23514', null, 'only sleep quality / energy can be marked watch-derived');
+update public.pre_session_checkins set watch_prefilled = '{}';
 
 select pg_temp.as_user('00000000-0000-0000-0000-0000000000b1');
 select is((select count(*)::int from public.pre_session_checkins), 0, 'trainer B cannot see check-in addressed to trainer A');

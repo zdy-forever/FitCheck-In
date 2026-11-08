@@ -208,8 +208,13 @@ export function ClientCheckInPage() {
   const { t } = useTranslation()
   const me = useProfile()
   const q = useLiveQuery(`client-checkin:${me.id}`, async () => {
-    const [relationships, sessions] = await Promise.all([api.myRelationships('client'), api.sessions({ clientId: me.id, limit: 50 })])
-    return { relationships, sessions }
+    // The snapshot only powers the optional "Use Apple Watch data" button; never block the form on it.
+    const [relationships, sessions, snapshot] = await Promise.all([
+      api.myRelationships('client'),
+      api.sessions({ clientId: me.id, limit: 50 }),
+      api.latestSnapshot(me.id).catch(() => null),
+    ])
+    return { relationships, sessions, snapshot }
   })
   return (
     <div className="mx-auto max-w-2xl">
@@ -229,7 +234,7 @@ export function ClientCheckInPage() {
           }
         />
       ) : (
-        <CheckinForm clientId={me.id} relationships={q.data.relationships} sessions={q.data.sessions} />
+        <CheckinForm clientId={me.id} relationships={q.data.relationships} sessions={q.data.sessions} snapshot={q.data.snapshot} />
       )}
     </div>
   )

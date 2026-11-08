@@ -179,6 +179,23 @@ vitals, mobility, body) and never the raw per-signal data. This fixed an issue w
 trainer granted only "readiness estimates" could read raw HRV/sleep values from the
 snapshot JSON via the API. Enforced and tested in pgTAP and integration tests.
 
+## 4d. Check-in pre-fill from Apple Watch
+
+On the check-in form, "Use Apple Watch data" fills the two answers that have a measured
+counterpart, from today's snapshot (client's local day; withheld/stale scores are never used).
+Values are rounded half-up to the nearest whole step and clamped to 1–5. The form shows the
+score, the exact mapped value and the rounded answer.
+
+| Answer | Source | Mapping |
+|---|---|---|
+| Sleep quality 1–5 | Sleep score 0–100 (health+ formula) | `1 + 4 × score / 100` (0 → 1, 50 → 3, 100 → 5) |
+| Energy 1–5 | Recovery 0–100 (v2, 65 = your normal, 12 pts / SD) | `3 + (recovery − 65) / 12` (normal → 3, +1 SD → 4) |
+
+Mental state, soreness, pain and the goal are subjective and never pre-filled.
+Answers the client keeps unchanged are stored in `pre_session_checkins.watch_prefilled`. The
+coach's card marks them with a watch icon. Readiness skips their check-in adjustment, because
+they are derived from the HRV / sleep data that recovery already counts.
+
 ## 5. The sufficiency layer
 
 The original engine **always returns a number**: missing inputs are replaced by neutral

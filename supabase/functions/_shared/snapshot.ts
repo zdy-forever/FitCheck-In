@@ -39,14 +39,21 @@ export async function recomputeSnapshot(
   // Today's most recent pre-session check-in (any trainer) — the client's own report is a readiness signal.
   const { data: checkins } = await admin
     .from('pre_session_checkins')
-    .select('energy_level, sleep_quality, muscle_soreness, pain_level, created_at')
+    .select('energy_level, sleep_quality, muscle_soreness, pain_level, watch_prefilled, created_at')
     .eq('client_id', userId)
     .gte('created_at', new Date(nowMs - 36 * 3_600_000).toISOString())
     .order('created_at', { ascending: false })
     .limit(5)
   const todays = (checkins ?? []).find((c) => localDateKey(Date.parse(c.created_at), timeZone) === date)
   const checkin = todays
-    ? { energy: todays.energy_level, sleepQuality: todays.sleep_quality, soreness: todays.muscle_soreness, pain: todays.pain_level }
+    ? {
+        // Answers pre-filled from the watch are derived from the same HRV / sleep data recovery
+        // already uses — counting them again would double-weight those signals.
+        energy: todays.watch_prefilled?.includes('energy_level') ? null : todays.energy_level,
+        sleepQuality: todays.watch_prefilled?.includes('sleep_quality') ? null : todays.sleep_quality,
+        soreness: todays.muscle_soreness,
+        pain: todays.pain_level,
+      }
     : null
 
   // Training sessions logged in FitCheck-In (all of this client's trainers) + their RPE feedback.
