@@ -191,7 +191,7 @@ function CheckinFormInner({ clientId, relationships, sessions, snapshot, onSubmi
   return (
     // Mobile: one column (who → ratings → goal → sticky submit).
     // Desktop: ratings on the left; who / goal / submit in a sticky panel on the right.
-    <form onSubmit={(e) => void submit(e)} noValidate className="flex flex-col gap-6 pb-4 lg:grid lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)] lg:items-start lg:gap-6" data-testid="checkin-form">
+    <form onSubmit={(e) => void submit(e)} noValidate className="flex flex-col gap-6 pb-4 lg:grid lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)] lg:items-start lg:gap-6 2xl:grid-cols-[minmax(0,1fr)_minmax(360px,440px)]" data-testid="checkin-form">
       {/* On mobile this wrapper is display:contents, so its children join the form's own column
           and `order` interleaves them with the ratings card. Each field is rendered once. */}
       <div className="contents lg:sticky lg:top-28 lg:col-start-2 lg:row-start-1 lg:flex lg:flex-col lg:gap-4">
@@ -218,9 +218,9 @@ function CheckinFormInner({ clientId, relationships, sessions, snapshot, onSubmi
       <div className="sticky bottom-24 z-10 order-4 lg:static lg:order-none">{submitBar}</div>
       </div>
 
-      <div className="card order-2 flex flex-col gap-7 p-5 sm:p-6 lg:order-none lg:col-start-1 lg:row-start-1">
+      <div className="card order-2 grid grid-cols-1 gap-7 p-5 sm:p-6 lg:order-none lg:col-start-1 lg:row-start-1 2xl:grid-cols-2 2xl:gap-x-10">
         {prefill && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-sunken p-4" data-testid="watch-prefill">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-sunken p-4 2xl:col-span-2" data-testid="watch-prefill">
             <div className="flex min-w-[min(100%,16rem)] flex-1 basis-64 items-start gap-3">
               <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent">
                 <Watch className="size-5" aria-hidden />
@@ -238,13 +238,18 @@ function CheckinFormInner({ clientId, relationships, sessions, snapshot, onSubmi
             </Button>
           </div>
         )}
-        <Scale name="sleep" label={t('checkin.sleepQuality')} min={1} max={5} value={v.sleep} onChange={(x) => set('sleep', x)} labels={t('checkin.scale.sleep', { returnObjects: true }) as string[]} hint={watchHint('sleep')} error={err('sleep')} />
-        <Scale name="energy" label={t('checkin.energy')} min={1} max={5} value={v.energy} onChange={(x) => set('energy', x)} labels={t('checkin.scale.energy', { returnObjects: true }) as string[]} hint={watchHint('energy')} error={err('energy')} />
-        <Scale name="mental" label={t('checkin.mental')} min={1} max={5} value={v.mental} onChange={(x) => set('mental', x)} labels={t('checkin.scale.mental', { returnObjects: true }) as string[]} error={err('mental')} />
-        <Scale name="soreness" tone="severity" label={t('checkin.soreness')} min={0} max={10} value={v.soreness} onChange={(x) => set('soreness', x)} hint={t('checkin.scale.soreness')} error={err('soreness')} />
-        <Scale name="pain" tone="severity" label={t('checkin.pain')} min={0} max={10} value={v.pain} onChange={(x) => set('pain', x)} hint={t('checkin.scale.pain')} error={err('pain')} />
+        {/* Wide screens: how you feel (1–5) | discomfort (0–10) side by side. */}
+        <div className="flex flex-col gap-7">
+          <Scale name="sleep" label={t('checkin.sleepQuality')} min={1} max={5} value={v.sleep} onChange={(x) => set('sleep', x)} labels={t('checkin.scale.sleep', { returnObjects: true }) as string[]} hint={watchHint('sleep')} error={err('sleep')} />
+          <Scale name="energy" label={t('checkin.energy')} min={1} max={5} value={v.energy} onChange={(x) => set('energy', x)} labels={t('checkin.scale.energy', { returnObjects: true }) as string[]} hint={watchHint('energy')} error={err('energy')} />
+          <Scale name="mental" label={t('checkin.mental')} min={1} max={5} value={v.mental} onChange={(x) => set('mental', x)} labels={t('checkin.scale.mental', { returnObjects: true }) as string[]} error={err('mental')} />
+        </div>
+        <div className="flex flex-col gap-7">
+          <Scale name="soreness" tone="severity" label={t('checkin.soreness')} min={0} max={10} value={v.soreness} onChange={(x) => set('soreness', x)} hint={t('checkin.scale.soreness')} error={err('soreness')} />
+          <Scale name="pain" tone="severity" label={t('checkin.pain')} min={0} max={10} value={v.pain} onChange={(x) => set('pain', x)} hint={t('checkin.scale.pain')} error={err('pain')} />
+        </div>
         {v.pain !== null && v.pain > 0 && (
-          <motion.fieldset initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+          <motion.fieldset initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="2xl:col-span-2">
             <legend className="mb-2 text-sm font-medium text-ink">
               {t('checkin.painAreas')} <span className="text-xs font-normal text-ink-3">({t('common.optional')})</span>
             </legend>

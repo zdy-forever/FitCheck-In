@@ -77,8 +77,8 @@ export function AppShell() {
       </a>
 
       {/* Top glass bar */}
-      <header className="sticky top-0 z-40 px-3 pt-3 sm:px-5">
-        <div className="glass mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 rounded-[22px] pl-4 pr-2">
+      <header className="sticky top-0 z-40 px-3 pt-3 sm:px-5 lg:px-7 2xl:px-9">
+        <div className="glass mx-auto flex h-16 max-w-[var(--shell-max)] items-center justify-between gap-3 rounded-[22px] pl-4 pr-2">
           <Link to={profile.role === 'trainer' ? '/trainer' : '/client'} aria-label={t('a11y.home')} className="shrink-0">
             <Wordmark />
           </Link>
@@ -113,20 +113,20 @@ export function AppShell() {
           </div>
         </div>
         {profile.is_demo && (
-          <p className="mx-auto mt-2 flex max-w-7xl items-center justify-center gap-1.5 rounded-xl bg-demo-soft px-3 py-1.5 text-center text-xs font-medium text-demo sm:hidden">
+          <p className="mx-auto mt-2 flex max-w-[var(--shell-max)] items-center justify-center gap-1.5 rounded-xl bg-demo-soft px-3 py-1.5 text-center text-xs font-medium text-demo sm:hidden">
             <FlaskConical className="size-3.5" aria-hidden />
             {t('common.demoDataLong')}
           </p>
         )}
         {!online && (
-          <p role="status" className="mx-auto mt-2 flex max-w-7xl items-center justify-center gap-2 rounded-xl bg-warn-soft px-3 py-2 text-sm font-medium text-warn">
+          <p role="status" className="mx-auto mt-2 flex max-w-[var(--shell-max)] items-center justify-center gap-2 rounded-xl bg-warn-soft px-3 py-2 text-sm font-medium text-warn">
             <WifiOff className="size-4" aria-hidden />
             {t('errors.offline')}
           </p>
         )}
       </header>
 
-      <main id="main" className="mx-auto max-w-7xl px-4 pb-32 pt-6 sm:px-6 sm:pt-10 lg:pb-16">
+      <main id="main" className="mx-auto max-w-[var(--shell-max)] px-4 pb-32 pt-6 sm:px-6 sm:pt-10 lg:px-8 lg:pb-16 2xl:px-10">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}>
             <FrozenOutlet />

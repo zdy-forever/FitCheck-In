@@ -78,7 +78,7 @@ export function ClientDashboard() {
   return (
     <div>
       <PageHeader title={t('client.greeting', { name: me.display_name })} subtitle={f.date(new Date(), { weekday: 'long', month: 'long', day: 'numeric' })} />
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-3 3xl:grid-cols-4">
         {/* Today */}
         <Card className="lg:col-span-2">
           <CardHeader title={t('client.todayTitle')} icon={<CalendarClock className="size-5" />} />
@@ -174,7 +174,7 @@ function TrainersCard({ relationships, onChanged }: { relationships: Awaited<Ret
     }
   }
   return (
-    <Card className="lg:col-span-3">
+    <Card className="lg:col-span-3 3xl:col-span-1">
       <CardHeader
         title={t('client.trainers')}
         icon={<Users className="size-5" />}
@@ -188,7 +188,7 @@ function TrainersCard({ relationships, onChanged }: { relationships: Awaited<Ret
       {active.length === 0 ? (
         <EmptyState icon={<UserPlus className="size-6" />} title={t('client.noTrainers')} />
       ) : (
-        <ul className="stagger grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="stagger grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 3xl:grid-cols-1">
           {active.map((r) => (
             <li key={r.id} className="lift flex items-center gap-3 rounded-2xl border border-line bg-surface-strong p-3">
               <div className="grid size-10 place-items-center rounded-full bg-accent-soft font-semibold text-accent">{r.peer?.display_name?.[0] ?? '?'}</div>
@@ -218,7 +218,7 @@ export function ClientCheckInPage() {
     return { relationships, sessions, snapshot }
   })
   return (
-    <div className="mx-auto max-w-2xl lg:max-w-6xl">
+    <div className="mx-auto max-w-2xl lg:max-w-none">
       <PageHeader title={t('checkin.title')} subtitle={t('checkin.subtitle')} />
       {q.loading ? (
         <CardSkeleton lines={6} />

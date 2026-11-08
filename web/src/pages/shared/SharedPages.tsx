@@ -297,7 +297,7 @@ export function SettingsPage() {
   }
 
   return (
-    <div className={clsx('mx-auto', me.role === 'client' ? 'max-w-7xl' : 'max-w-3xl')}>
+    <div className={clsx('mx-auto', me.role === 'client' ? 'max-w-none' : 'max-w-3xl')}>
       <PageHeader title={t('settings.title')} />
       {/* Desktop (clients): profile + privacy on the left, the per-trainer sharing list on the
           right (sticky). Mobile and trainers: one column. */}
