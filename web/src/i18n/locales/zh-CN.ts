@@ -428,6 +428,10 @@ const zhCN: Translation = {
     historyTitle: '训练历史',
     historySubtitle: '你的训练课、问卷、反馈和教练笔记。',
     trends: '长期趋势',
+    historySummary: '概况',
+    historyShow: '显示',
+    historyNeedsFeedback: '{{count}} 节已完成的训练课还没有反馈',
+    historyFilter: { all: '全部', session: '训练课', checkin: '问卷', note: '教练笔记' },
   },
   health: {
     title: 'Apple 健康',

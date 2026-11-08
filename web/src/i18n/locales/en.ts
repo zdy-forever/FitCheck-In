@@ -427,6 +427,10 @@ const en = {
     historyTitle: 'Training history',
     historySubtitle: 'Your sessions, check-ins, feedback and coach notes.',
     trends: 'Trends',
+    historySummary: 'Summary',
+    historyShow: 'Show',
+    historyNeedsFeedback: '{{count}} completed session(s) without your feedback',
+    historyFilter: { all: 'All', session: 'Sessions', checkin: 'Check-ins', note: 'Coach notes' },
   },
   health: {
     title: 'Apple Health',

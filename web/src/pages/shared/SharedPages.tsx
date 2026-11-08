@@ -297,10 +297,12 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className={clsx('mx-auto', me.role === 'client' ? 'max-w-7xl' : 'max-w-3xl')}>
       <PageHeader title={t('settings.title')} />
-      <div className="flex flex-col gap-4">
-        <Card>
+      {/* Desktop (clients): profile + privacy on the left, the per-trainer sharing list on the
+          right (sticky). Mobile and trainers: one column. */}
+      <div className={clsx('grid gap-4', me.role === 'client' && 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start xl:gap-6')}>
+        <Card className="lg:col-start-1">
           <CardHeader title={t('settings.profile')} icon={<UserRound className="size-5" />} />
           <form onSubmit={(e) => void saveProfile(e)} noValidate className="grid gap-4 sm:grid-cols-2">
             <TextField label={t('settings.displayName')} value={name} onChange={(e) => setName(e.target.value)} error={nameError} maxLength={80} />
@@ -339,7 +341,7 @@ export function SettingsPage() {
         </Card>
 
         {me.role === 'client' && (
-          <Card>
+          <Card className="lg:sticky lg:top-28 lg:col-start-2 lg:row-span-2 lg:row-start-1">
             <CardHeader title={t('settings.sharing')} subtitle={t('settings.sharingSubtitle')} icon={<ShieldCheck className="size-5" />} />
             {sharingQ.loading ? (
               <CardSkeleton />
@@ -413,7 +415,7 @@ export function SettingsPage() {
           </Card>
         )}
 
-        <Card className="border-bad/25">
+        <Card className="border-bad/25 lg:col-start-1">
           <CardHeader title={t('settings.privacy')} icon={<Trash2 className="size-5" />} action={<Link to="/privacy" className="text-sm font-medium text-accent hover:underline">{t('landing.footer.privacy')}</Link>} />
           <div className="flex flex-col gap-4">
             {me.role === 'client' && (

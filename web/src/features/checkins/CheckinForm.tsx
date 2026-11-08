@@ -176,9 +176,26 @@ function CheckinFormInner({ clientId, relationships, sessions, snapshot, onSubmi
     )
   }
 
+  const goalCard = (
+    <div className="card flex flex-col gap-4 p-5 sm:p-6">
+      <TextArea label={t('checkin.goal')} placeholder={t('checkin.goalPlaceholder')} value={v.goal} onChange={(e) => set('goal', e.target.value)} error={err('goal')} rows={2} maxLength={300} name="goal" />
+      <TextArea label={t('checkin.notes')} value={v.notes} onChange={(e) => set('notes', e.target.value)} error={err('notes')} optionalLabel={t('common.optional')} rows={3} maxLength={1000} name="notes" />
+    </div>
+  )
+  const submitBar = (
+    <Button type="submit" size="lg" loading={submitting} className="w-full shadow-[var(--shadow-lg)]" icon={<Send className="size-5" aria-hidden />} data-testid="checkin-submit">
+      {submitting ? t('checkin.submitting') : t('checkin.submit')}
+    </Button>
+  )
+
   return (
-    <form onSubmit={(e) => void submit(e)} noValidate className="flex flex-col gap-6 pb-4" data-testid="checkin-form">
-      <div className="card grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
+    // Mobile: one column (who → ratings → goal → sticky submit).
+    // Desktop: ratings on the left; who / goal / submit in a sticky panel on the right.
+    <form onSubmit={(e) => void submit(e)} noValidate className="flex flex-col gap-6 pb-4 lg:grid lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)] lg:items-start lg:gap-6" data-testid="checkin-form">
+      {/* On mobile this wrapper is display:contents, so its children join the form's own column
+          and `order` interleaves them with the ratings card. Each field is rendered once. */}
+      <div className="contents lg:sticky lg:top-28 lg:col-start-2 lg:row-start-1 lg:flex lg:flex-col lg:gap-4">
+      <div className="card order-1 grid gap-4 p-5 sm:grid-cols-2 sm:p-6 lg:order-none lg:grid-cols-1">
         <SelectField label={t('checkin.trainer')} value={v.trainerId} onChange={(e) => { set('trainerId', e.target.value); set('sessionId', '') }} error={err('trainerId')}>
           {active.map((r) => (
             <option key={r.trainer_id} value={r.trainer_id}>
@@ -197,11 +214,14 @@ function CheckinFormInner({ clientId, relationships, sessions, snapshot, onSubmi
             ))}
         </SelectField>
       </div>
+      <div className="order-3 lg:order-none">{goalCard}</div>
+      <div className="sticky bottom-24 z-10 order-4 lg:static lg:order-none">{submitBar}</div>
+      </div>
 
-      <div className="card flex flex-col gap-7 p-5 sm:p-6">
+      <div className="card order-2 flex flex-col gap-7 p-5 sm:p-6 lg:order-none lg:col-start-1 lg:row-start-1">
         {prefill && (
-          <div className="flex flex-col gap-3 rounded-2xl border border-line bg-sunken p-4 sm:flex-row sm:items-center sm:justify-between" data-testid="watch-prefill">
-            <div className="flex items-start gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-sunken p-4" data-testid="watch-prefill">
+            <div className="flex min-w-[min(100%,16rem)] flex-1 basis-64 items-start gap-3">
               <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent">
                 <Watch className="size-5" aria-hidden />
               </div>
@@ -249,16 +269,6 @@ function CheckinFormInner({ clientId, relationships, sessions, snapshot, onSubmi
         )}
       </div>
 
-      <div className="card flex flex-col gap-4 p-5 sm:p-6">
-        <TextArea label={t('checkin.goal')} placeholder={t('checkin.goalPlaceholder')} value={v.goal} onChange={(e) => set('goal', e.target.value)} error={err('goal')} rows={2} maxLength={300} name="goal" />
-        <TextArea label={t('checkin.notes')} value={v.notes} onChange={(e) => set('notes', e.target.value)} error={err('notes')} optionalLabel={t('common.optional')} rows={3} maxLength={1000} name="notes" />
-      </div>
-
-      <div className="sticky bottom-24 z-10 lg:bottom-4">
-        <Button type="submit" size="lg" loading={submitting} className="w-full shadow-[var(--shadow-lg)]" icon={<Send className="size-5" aria-hidden />} data-testid="checkin-submit">
-          {submitting ? t('checkin.submitting') : t('checkin.submit')}
-        </Button>
-      </div>
     </form>
   )
 }

@@ -600,7 +600,7 @@ export function TrainerSessionsPage() {
       ) : list.length === 0 ? (
         <EmptyState icon={<CalendarDays className="size-6" />} title={t('sessions.none')} />
       ) : (
-        <div className="stagger grid gap-3 lg:grid-cols-2">
+        <div className="stagger grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
           {list.map((s) => (
             <SessionCard key={s.id} session={s} trainerName={s.client?.display_name ?? undefined} onEdit={() => setEditing(s)} />
           ))}
@@ -675,7 +675,7 @@ export function TrainerInvitationsPage() {
       ) : q.data.length === 0 ? (
         <EmptyState icon={<Mail className="size-6" />} title={t('invitations.none')} body={t('trainer.noClientsBody')} />
       ) : (
-        <ul className="stagger grid gap-3 md:grid-cols-2" data-testid="invite-list">
+        <ul className="stagger grid gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="invite-list">
           {q.data.map((i) => {
             const st = statusOf(i)
             return (

@@ -22,6 +22,7 @@ import { Card, CardHeader, PageHeader } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorNotice } from '@/components/ui/ErrorNotice'
 import { ConfirmModal } from '@/components/ui/Modal'
+import { Segmented } from '@/components/ui/Segmented'
 import { CardSkeleton } from '@/components/ui/Skeleton'
 import { useToast } from '@/components/ui/Toast'
 import { useProfile } from '@/features/auth/AuthProvider'
@@ -217,7 +218,7 @@ export function ClientCheckInPage() {
     return { relationships, sessions, snapshot }
   })
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-2xl lg:max-w-6xl">
       <PageHeader title={t('checkin.title')} subtitle={t('checkin.subtitle')} />
       {q.loading ? (
         <CardSkeleton lines={6} />
@@ -263,10 +264,20 @@ export function ClientHistoryPage() {
   }, [q.data])
 
   const trainerName = (id: string) => q.data?.relationships.find((r) => r.trainer_id === id)?.peer?.display_name ?? ''
+  const [kind, setKind] = useState<'all' | TimelineItem['kind']>('all')
+  const shown = kind === 'all' ? items : items.filter((it) => it.kind === kind)
+  const count = (k: TimelineItem['kind']) => items.filter((it) => it.kind === k).length
+  const needsFeedback = items.filter((it) => it.kind === 'session' && it.session.status === 'completed' && it.session.post_session_feedback.length === 0).length
+  const filters = (['all', 'session', 'checkin', 'note'] as const).map((k) => ({ value: k, label: `${t(`client.historyFilter.${k}`)} ${k === 'all' ? items.length : count(k)}` }))
 
   return (
     <div>
       <PageHeader title={t('client.historyTitle')} subtitle={t('client.historySubtitle')} />
+      {items.length > 0 && (
+        <div className="mb-5 lg:hidden">
+          <Segmented label={t('client.historyTitle')} value={kind} onChange={setKind} options={filters} size="sm" />
+        </div>
+      )}
       {q.loading ? (
         <CardSkeleton lines={6} />
       ) : q.error || !q.data ? (
@@ -274,8 +285,9 @@ export function ClientHistoryPage() {
       ) : items.length === 0 ? (
         <EmptyState icon={<CalendarClock className="size-6" />} title={t('sessions.none')} />
       ) : (
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start lg:gap-8 xl:grid-cols-[minmax(0,1fr)_340px]">
         <ol className="stagger relative ml-3 border-l border-line pl-6 sm:ml-4 sm:pl-8" data-testid="timeline">
-          {items.map((it) => (
+          {shown.map((it) => (
             <li key={`${it.kind}-${it.kind === 'session' ? it.session.id : it.kind === 'checkin' ? it.checkin.id : it.note.id}`} className="relative mb-5">
               <span className={clsx('absolute -left-[38px] top-4 grid size-7 place-items-center rounded-full ring-4 ring-[var(--bg)] sm:-left-[46px]', it.kind === 'session' ? 'bg-accent text-accent-contrast' : it.kind === 'checkin' ? 'bg-surface-strong text-ink-2 border border-line' : 'bg-demo-soft text-demo')} aria-hidden>
                 {it.kind === 'session' ? <Dumbbell className="size-3.5" /> : it.kind === 'checkin' ? <ClipboardCheck className="size-3.5" /> : <NotebookPen className="size-3.5" />}
@@ -297,6 +309,45 @@ export function ClientHistoryPage() {
             </li>
           ))}
         </ol>
+        {/* Desktop sidebar: summary + filters, sticky beside the timeline. */}
+        <aside className="hidden lg:sticky lg:top-28 lg:flex lg:flex-col lg:gap-4" data-testid="history-sidebar">
+          <Card>
+            <CardHeader title={t('client.historySummary')} icon={<CalendarClock className="size-5" />} />
+            <div className="grid grid-cols-3 gap-2 text-center">
+              {(['session', 'checkin', 'note'] as const).map((k) => (
+                <div key={k} className="rounded-xl bg-sunken p-3">
+                  <div className="font-display text-2xl font-semibold tabular text-ink">{count(k)}</div>
+                  <div className="truncate text-2xs text-ink-3">{t(`client.historyFilter.${k}`)}</div>
+                </div>
+              ))}
+            </div>
+            {needsFeedback > 0 && (
+              <button type="button" onClick={() => setKind('session')} className="mt-3 flex w-full items-center justify-between gap-2 rounded-xl bg-accent-soft px-3 py-2.5 text-left text-sm font-medium text-accent transition-colors hover:bg-accent-wash">
+                {t('client.historyNeedsFeedback', { count: needsFeedback })}
+                <ChevronRight className="size-4" aria-hidden />
+              </button>
+            )}
+          </Card>
+          <Card>
+            <CardHeader title={t('client.historyShow')} />
+            <div className="flex flex-col gap-1" role="radiogroup" aria-label={t('client.historyShow')}>
+              {filters.map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={kind === o.value}
+                  onClick={() => setKind(o.value)}
+                  className={clsx('row-hover flex items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-colors', kind === o.value ? 'bg-accent-soft font-medium text-accent' : 'text-ink-2 hover:bg-sunken')}
+                >
+                  <span>{t(`client.historyFilter.${o.value}`)}</span>
+                  <span className="tabular text-ink-3">{o.value === 'all' ? items.length : count(o.value)}</span>
+                </button>
+              ))}
+            </div>
+          </Card>
+        </aside>
+        </div>
       )}
       {feedbackFor && (
         <FeedbackModal open onClose={() => setFeedbackFor(null)} sessionId={feedbackFor.id} clientId={me.id} existing={feedbackFor.post_session_feedback[0]} onSaved={() => void q.reload()} />
