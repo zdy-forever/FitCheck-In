@@ -28,6 +28,7 @@ const TrainerSessionsPage = lazyNamed(trainer, 'TrainerSessionsPage')
 const TrainerInvitationsPage = lazyNamed(trainer, 'TrainerInvitationsPage')
 const ClientDashboard = lazyNamed(client, 'ClientDashboard')
 const ClientCheckInPage = lazyNamed(client, 'ClientCheckInPage')
+const ClientTrainingPage = lazyNamed(client, 'ClientTrainingPage')
 const ClientHistoryPage = lazyNamed(client, 'ClientHistoryPage')
 const ClientHealthPage = lazyNamed(client, 'ClientHealthPage')
 const SettingsPage = lazyNamed(shared, 'SettingsPage')
@@ -76,6 +77,7 @@ const router = createBrowserRouter([
               { path: 'check-in', element: s(<ClientCheckInPage />) },
               { path: 'history', element: s(<ClientHistoryPage />) },
               { path: 'health', element: s(<ClientHealthPage />) },
+              { path: 'training', element: s(<ClientTrainingPage />) },
               { path: 'join', element: s(<JoinTrainerPage />) },
               { path: 'settings', element: s(<SettingsPage />) },
             ],

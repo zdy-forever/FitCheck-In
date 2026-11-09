@@ -110,7 +110,14 @@ export const METRICS: Record<MetricType, MetricDefinition> = {
 export const SLEEP_STAGES = ['inBed', 'awake', 'asleepCore', 'asleepDeep', 'asleepREM', 'asleepUnspecified'] as const
 export type SleepStage = (typeof SLEEP_STAGES)[number]
 
-export const WORKOUT_KINDS = ['running', 'walking', 'cycling', 'strength', 'yoga', 'swimming', 'mixed', 'other'] as const
+/**
+ * Workout kinds. The first eight are the health+ / iOS module kinds (scoring depends on them);
+ * the rest only refine what the browser import used to file under 'mixed'.
+ */
+export const WORKOUT_KINDS = [
+  'running', 'walking', 'cycling', 'strength', 'yoga', 'swimming', 'mixed', 'other',
+  'hiking', 'hiit', 'core', 'dance', 'rowing', 'elliptical', 'stairs', 'team_sports', 'racket_sports', 'combat', 'climbing', 'flexibility', 'cooldown',
+] as const
 
 /** One sample as uploaded by the iOS bridge. */
 export interface HealthSampleUpload {

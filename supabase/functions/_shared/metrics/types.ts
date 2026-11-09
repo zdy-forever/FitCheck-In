@@ -16,6 +16,20 @@ export type WorkoutKind =
   | 'swimming'
   | 'mixed'
   | 'other'
+  // Browser-import refinements (scored like their nearest health+ kind; see modalityForWorkoutKind)
+  | 'hiking'
+  | 'hiit'
+  | 'core'
+  | 'dance'
+  | 'rowing'
+  | 'elliptical'
+  | 'stairs'
+  | 'team_sports'
+  | 'racket_sports'
+  | 'combat'
+  | 'climbing'
+  | 'flexibility'
+  | 'cooldown'
 
 export type WorkoutDataSource = 'appleHealth' | 'journal'
 

@@ -49,6 +49,8 @@ export interface ParseStats {
 export interface ParseOptions {
   /** Days of history to import (slow metrics like VO₂ max / body use the same window). */
   lookbackDays?: number
+  /** Days of workout history (default 365; the server accepts up to 400). Workouts are few, so a longer window is cheap. */
+  workoutLookbackDays?: number
   timeZone: string
   nowMs?: number
   onProgress?: (p: { bytesRead: number; totalBytes: number | null; records: number }) => void
@@ -128,26 +130,70 @@ const SLEEP_STAGE: Record<string, string> = {
   HKCategoryValueSleepAnalysisAsleep: 'asleepUnspecified', // pre-iOS 16 exports
 }
 
+/**
+ * HKWorkoutActivityType → workout kind. The health+ kinds (running … swimming) are unchanged
+ * from the iOS module; activities it filed under 'mixed' get a more specific kind here so the
+ * training history can tell HIIT from tennis. Anything unknown stays 'mixed'.
+ */
+const KIND_BY_ACTIVITY: Record<string, string> = {
+  Running: 'running',
+  Walking: 'walking',
+  Hiking: 'hiking',
+  Cycling: 'cycling',
+  HandCycling: 'cycling',
+  TraditionalStrengthTraining: 'strength',
+  FunctionalStrengthTraining: 'strength',
+  Yoga: 'yoga',
+  Pilates: 'yoga',
+  MindAndBody: 'yoga',
+  TaiChi: 'yoga',
+  Swimming: 'swimming',
+  WaterFitness: 'swimming',
+  HighIntensityIntervalTraining: 'hiit',
+  CrossTraining: 'hiit',
+  MixedCardio: 'hiit',
+  JumpRope: 'hiit',
+  CoreTraining: 'core',
+  Dance: 'dance',
+  CardioDance: 'dance',
+  SocialDance: 'dance',
+  Barre: 'dance',
+  Rowing: 'rowing',
+  Paddling: 'rowing',
+  Elliptical: 'elliptical',
+  StairClimbing: 'stairs',
+  Stairs: 'stairs',
+  StepTraining: 'stairs',
+  Soccer: 'team_sports',
+  Basketball: 'team_sports',
+  Volleyball: 'team_sports',
+  AmericanFootball: 'team_sports',
+  AustralianFootball: 'team_sports',
+  Rugby: 'team_sports',
+  Hockey: 'team_sports',
+  Handball: 'team_sports',
+  Baseball: 'team_sports',
+  Softball: 'team_sports',
+  Cricket: 'team_sports',
+  Lacrosse: 'team_sports',
+  Tennis: 'racket_sports',
+  Badminton: 'racket_sports',
+  TableTennis: 'racket_sports',
+  Squash: 'racket_sports',
+  Racquetball: 'racket_sports',
+  Pickleball: 'racket_sports',
+  Boxing: 'combat',
+  Kickboxing: 'combat',
+  MartialArts: 'combat',
+  Wrestling: 'combat',
+  Fencing: 'combat',
+  Climbing: 'climbing',
+  Flexibility: 'flexibility',
+  Cooldown: 'cooldown',
+  PreparationAndRecovery: 'cooldown',
+}
 export function workoutKind(activityType: string): string {
-  switch (activityType.replace('HKWorkoutActivityType', '')) {
-    case 'Running':
-      return 'running'
-    case 'Walking':
-    case 'Hiking':
-      return 'walking'
-    case 'Cycling':
-      return 'cycling'
-    case 'TraditionalStrengthTraining':
-    case 'FunctionalStrengthTraining':
-      return 'strength'
-    case 'Yoga':
-    case 'Pilates':
-      return 'yoga'
-    case 'Swimming':
-      return 'swimming'
-    default:
-      return 'mixed'
-  }
+  return KIND_BY_ACTIVITY[activityType.replace('HKWorkoutActivityType', '')] ?? 'mixed'
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -217,6 +263,7 @@ interface PendingWorkout {
 
 export class ExportAggregator {
   private readonly cutoff: number
+  private readonly workoutCutoff: number
   private readonly hrCutoff: number
   private readonly tz: string
   private readonly nowMs: number
@@ -230,10 +277,11 @@ export class ExportAggregator {
   private signals = new Map<keyof WorkoutMetadata | 'hr', number[]>()
   private workouts: PendingWorkout[] = []
 
-  constructor(opts: { lookbackDays: number; timeZone: string; nowMs: number }) {
+  constructor(opts: { lookbackDays: number; workoutLookbackDays?: number; timeZone: string; nowMs: number }) {
     this.tz = opts.timeZone
     this.nowMs = opts.nowMs
     this.cutoff = opts.nowMs - opts.lookbackDays * 86_400_000
+    this.workoutCutoff = opts.nowMs - Math.max(opts.lookbackDays, opts.workoutLookbackDays ?? 365) * 86_400_000
     this.hrCutoff = opts.nowMs - 7 * 86_400_000
   }
 
@@ -418,7 +466,7 @@ export class ExportAggregator {
         this.stats.skippedInvalid++
         continue
       }
-      if (end < this.cutoff || end > this.nowMs + 10 * 60_000) {
+      if (end < this.workoutCutoff || end > this.nowMs + 10 * 60_000) {
         this.stats.skippedOld++
         continue
       }
@@ -562,7 +610,7 @@ const CHUNK = 1 << 20 // 1 MiB
 
 export async function parseHealthExport(file: Blob & { name?: string }, opts: ParseOptions): Promise<{ samples: ImportSample[]; stats: ParseStats }> {
   const nowMs = opts.nowMs ?? Date.now()
-  const agg = new ExportAggregator({ lookbackDays: opts.lookbackDays ?? 90, timeZone: opts.timeZone, nowMs })
+  const agg = new ExportAggregator({ lookbackDays: opts.lookbackDays ?? 90, workoutLookbackDays: opts.workoutLookbackDays, timeZone: opts.timeZone, nowMs })
   const scanner = new ExportScanner(agg)
   const decoder = new TextDecoder('utf-8')
   const total = file.size
