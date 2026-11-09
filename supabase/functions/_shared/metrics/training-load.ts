@@ -64,16 +64,24 @@ export function modalityForSessionType(type: string | null | undefined): LoadMod
 export function modalityForWorkoutKind(kind: string | null | undefined): LoadModality {
   switch (kind) {
     case 'strength':
+    case 'core':
+    case 'climbing':
       return 'resistance'
     case 'running':
     case 'walking':
+    case 'hiking':
     case 'cycling':
     case 'swimming':
+    case 'rowing':
+    case 'elliptical':
+    case 'stairs':
       return 'cardio'
     case 'yoga':
+    case 'flexibility':
+    case 'cooldown':
       return 'mobility'
     default:
-      return 'mixed'
+      return 'mixed' // hiit, dance, team/racket sports, combat, mixed, other
   }
 }
 
@@ -142,8 +150,19 @@ export function personalMaxHeartRate(watch: WatchWorkout[], age = 35): number {
   return Math.max(208 - 0.7 * age, observed)
 }
 
-function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number, slackMs = 30 * 60_000): boolean {
+/**
+ * The single rule for "this coach session and this watch workout are the same training":
+ * their time ranges overlap, allowing 30 min of slack (late start, watch started early).
+ * Used by the load model and by the training page so both always agree.
+ */
+export const SESSION_MATCH_SLACK_MS = 30 * 60_000
+export function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number, slackMs = SESSION_MATCH_SLACK_MS): boolean {
   return aStart - slackMs < bEnd && bStart - slackMs < aEnd
+}
+
+/** End of a coach session for matching: its duration, or the typical one for its type. */
+export function sessionEndMs(s: { startMs: number; durationMinutes: number | null; sessionType: string }): number {
+  return s.startMs + (s.durationMinutes ?? DEFAULT_DURATION_MIN[modalityForSessionType(s.sessionType)]) * 60_000
 }
 
 export function computeTrainingLoad(input: { nowMs: number; platform: PlatformSession[]; watch: WatchWorkout[]; restingHeartRate?: number; age?: number }): TrainingLoadResult {
@@ -160,7 +179,7 @@ export function computeTrainingLoad(input: { nowMs: number; platform: PlatformSe
     const happened = s.status === 'completed' || s.clientRpe !== null || s.actualIntensity !== null
     if (!happened) continue
     const modality = modalityForSessionType(s.sessionType)
-    const sessionEnd = s.startMs + (s.durationMinutes ?? DEFAULT_DURATION_MIN[modality]) * 60_000
+    const sessionEnd = sessionEndMs(s)
     const match = input.watch.find((w) => !usedWatch.has(w.id) && overlaps(s.startMs, sessionEnd, w.startMs, w.endMs))
     if (match) usedWatch.add(match.id)
 

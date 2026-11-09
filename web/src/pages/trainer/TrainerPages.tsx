@@ -44,6 +44,7 @@ import { api, type Note, type SessionWithDetails } from '@/lib/api'
 import { appUrl } from '@/lib/env'
 import { errorKey } from '@/lib/errors'
 import { isSameLocalDay, useFormatters } from '@/lib/format'
+import { TrainingHistory } from '@/features/training/TrainingHistory'
 import { SessionCard } from '../client/ClientPages'
 
 type OverviewRow = Awaited<ReturnType<typeof api.trainerOverview>>[number]
@@ -387,7 +388,7 @@ function ClientRow({ c }: { c: OverviewRow }) {
   )
 }
 
-type Tab = 'overview' | 'checkins' | 'health' | 'sessions' | 'notes'
+type Tab = 'overview' | 'checkins' | 'health' | 'training' | 'sessions' | 'notes'
 
 export function TrainerClientDetail() {
   const { t, i18n } = useTranslation()
@@ -441,7 +442,7 @@ export function TrainerClientDetail() {
     }
   }
 
-  const tabs: { value: Tab; label: string }[] = (['overview', 'checkins', 'health', 'sessions', 'notes'] as const).map((v) => ({ value: v, label: t(`trainer.tabs.${v}`) }))
+  const tabs: { value: Tab; label: string }[] = (['overview', 'checkins', 'health', 'training', 'sessions', 'notes'] as const).map((v) => ({ value: v, label: t(`trainer.tabs.${v}`) }))
 
   return (
     <div>
@@ -496,6 +497,7 @@ export function TrainerClientDetail() {
         </div>
       )}
       {tab === 'health' && <HealthView userId={clientId} timeZone={profile.time_zone} viewerTrainerId={me.id} lastSyncAt={rel.health_last_sync_at} />}
+      {tab === 'training' && <TrainingHistory clientId={clientId} timeZone={profile.time_zone} viewerTrainerId={me.id} />}
       {tab === 'sessions' && (
         <div className="flex flex-col gap-3">
           {sessions.length === 0 ? (

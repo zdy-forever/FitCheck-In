@@ -66,7 +66,7 @@ export function HealthView({ userId, timeZone, viewerTrainerId, lastSyncAt }: { 
                 const meta = (w.metadata ?? {}) as { averageHeartRate?: number; energyKCal?: number }
                 return (
                   <li key={w.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
-                    <span className="font-medium text-ink">{t(`sessions.types.${w.category === 'running' || w.category === 'walking' || w.category === 'cycling' || w.category === 'swimming' ? 'endurance' : w.category === 'yoga' ? 'mobility' : w.category === 'strength' ? 'strength' : 'other'}`)} · {w.category}</span>
+                    <span className="font-medium text-ink">{t(`training.kinds.${w.category ?? 'mixed'}`, { defaultValue: w.category ?? '' })}</span>
                     <span className="text-ink-3">
                       {f.weekdayShort(w.measured_at)} · {f.num(w.value)} {t('health.units.min')}
                       {meta.averageHeartRate ? ` · ${f.num(meta.averageHeartRate)} ${t('health.units.bpm')}` : ''}

@@ -3,7 +3,7 @@
  * stored with `origin = 'demo'` on `is_demo` profiles only. Deterministic per seed.
  */
 
-import { addDays, fromLocal, localParts, startOfDay } from './metrics/calendar.ts'
+import { addDays, fromLocal, localDateKey, localParts, startOfDay } from './metrics/calendar.ts'
 import { METRICS, type MetricType } from './metrics/health-schema.ts'
 
 export interface DemoSample {
@@ -20,8 +20,9 @@ export interface DemoSample {
 
 /**
  * Days (offsets from today, negative = past) with a coach-led session in the demo:
- * three sessions a week for four weeks. The watch never records a separate workout on these
- * days, so nothing is double-counted; on other days the client does some solo cardio.
+ * three sessions a week for four weeks. demo-session schedules them at the current time of
+ * day; the simulated watch records a workout at the same time (it pairs with the session and
+ * is counted once). On other days the client does some solo cardio.
  */
 export const DEMO_COACH_DAY_OFFSETS = [-26, -24, -22, -19, -17, -15, -12, -10, -8, -6, -3, -1] as const
 
@@ -147,6 +148,46 @@ export function generateDemoSamples(nowMs: number, timeZone: string, seed = 42):
       push(`fat:${key}`, 'body_fat', 18.5 - (29 - i) * 0.03 + (r() - 0.5) * 0.3, at(7), at(7))
     }
   }
+  // The watch also recorded each coach session (same time as demo-session schedules it).
+  // demo-session: the last three are full sessions (the third is conditioning); earlier ones
+  // are conditioning every third.
+  const DAY = 86_400_000
+  DEMO_COACH_DAY_OFFSETS.forEach((offset, j) => {
+    const lastThree = j >= DEMO_COACH_DAY_OFFSETS.length - 3
+    const conditioning = lastThree ? j === DEMO_COACH_DAY_OFFSETS.length - 1 : j % 3 === 2
+    const start = nowMs + offset * DAY + 3 * 60_000
+    const duration = 52 + Math.round(r() * 6)
+    const avg = conditioning ? 142 + r() * 10 : 118 + r() * 12
+    push(`coach-workout:${offset}`, 'workout', duration, start, start + duration * 60_000, conditioning ? 'hiit' : 'strength', {
+      averageHeartRate: Math.round(avg),
+      maxHeartRate: Math.round(avg * (conditioning ? 1.2 : 1.32)),
+      energyKCal: Math.round(duration * (conditioning ? 9.5 : 6.5)),
+    })
+  })
+
+  // About a year of earlier solo training (beyond the 30 detailed days), so the training
+  // history has months to show. Older than every scoring window, so scores are unaffected.
+  const OLDER_KINDS = ['running', 'running', 'cycling', 'walking', 'swimming', 'hiit', 'yoga', 'racket_sports'] as const
+  for (let i = 360; i >= 31; i--) {
+    const dow = i % 7
+    if (!(dow === 1 || dow === 4 || (dow === 6 && r() < 0.6))) continue
+    if (r() < 0.12) continue // skipped week days happen
+    const day = addDays(today, -i, timeZone)
+    const p = localParts(day, timeZone)
+    const kind = OLDER_KINDS[Math.floor(r() * OLDER_KINDS.length)]!
+    const start = fromLocal(p.year, p.month, p.day, dow === 6 ? 9 : 18, 0, 0, 0, timeZone)
+    const duration = kind === 'walking' ? 45 + Math.round(r() * 30) : kind === 'yoga' ? 50 + Math.round(r() * 15) : 30 + Math.round(r() * 30)
+    const cardio = kind === 'running' || kind === 'cycling' || kind === 'swimming' || kind === 'walking'
+    const avg = kind === 'yoga' ? 96 + r() * 10 : kind === 'walking' ? 104 + r() * 10 : 136 + r() * 16
+    const kmPerMin = kind === 'running' ? 0.17 : kind === 'cycling' ? 0.4 : kind === 'swimming' ? 0.035 : 0.09
+    push(`older-workout:${localDateKey(day, timeZone)}`, 'workout', duration, start, start + duration * 60_000, kind, {
+      averageHeartRate: Math.round(avg),
+      maxHeartRate: Math.round(avg * 1.15),
+      energyKCal: Math.round(duration * (kind === 'yoga' ? 3.5 : kind === 'walking' ? 5 : 9)),
+      ...(cardio ? { distanceKM: Math.round(duration * kmPerMin * (0.9 + r() * 0.2) * 10) / 10 } : {}),
+    })
+  }
+
   // 13 weekly VO₂max estimates over 90 days, slowly improving (simulated).
   for (let w = 12; w >= 0; w--) {
     const t = addDays(today, -w * 7, timeZone) + 9 * 3_600_000

@@ -2,6 +2,7 @@ import { clsx } from 'clsx'
 import {
   Activity,
   CalendarDays,
+  Dumbbell,
   ClipboardCheck,
   FlaskConical,
   History,
@@ -27,6 +28,8 @@ interface Item {
   label: string
   Icon: typeof Users
   end?: boolean
+  /** Shown in the desktop header only (the mobile tab bar keeps five tabs). */
+  desktopOnly?: boolean
 }
 
 export function AppShell() {
@@ -60,6 +63,7 @@ export function AppShell() {
           { to: '/client/check-in', label: t('nav.checkIn'), Icon: ClipboardCheck },
           { to: '/client/history', label: t('nav.history'), Icon: History },
           { to: '/client/health', label: t('nav.health'), Icon: Activity },
+          { to: '/client/training', label: t('nav.training'), Icon: Dumbbell, desktopOnly: true },
           { to: '/client/settings', label: t('nav.settings'), Icon: Settings },
         ]
 
@@ -137,7 +141,7 @@ export function AppShell() {
       {/* Mobile floating tab bar */}
       <nav className="fixed inset-x-3 bottom-3 z-40 lg:hidden" aria-label={t('a11y.primaryNav')}>
         <div className="glass-strong mx-auto flex max-w-md items-stretch justify-between rounded-[26px] p-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))]">
-          {items.map(({ to, label, Icon, end }) => (
+          {items.filter((i) => !i.desktopOnly).map(({ to, label, Icon, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => clsx('relative flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-[20px] text-2xs font-medium transition-[color,transform] duration-200 active:scale-90', isActive ? 'text-accent' : 'text-ink-3')}>
               {({ isActive }) => (
                 <>

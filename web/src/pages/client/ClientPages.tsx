@@ -30,6 +30,7 @@ import { CheckinCard } from '@/features/checkins/CheckinCard'
 import { CheckinForm } from '@/features/checkins/CheckinForm'
 import { ImportQrCard } from '@/features/health-import/ImportQrCard'
 import { HealthGlance, HealthView } from '@/features/health/HealthView'
+import { TrainingHistory } from '@/features/training/TrainingHistory'
 import { FeedbackModal } from '@/features/sessions/FeedbackForm'
 import { useLiveQuery } from '@/hooks/useLiveQuery'
 import { api, type SessionWithDetails } from '@/lib/api'
@@ -454,8 +455,27 @@ export function ClientHealthPage() {
       <PageHeader title={t('health.title')} subtitle={t('health.subtitle')} />
       <div className="flex flex-col gap-4">
         {!me.is_demo && <ImportQrCard />}
+        {/* The mobile tab bar has no Training tab; this is the way in on phones. */}
+        <Link to="/client/training" className="card flex items-center justify-between gap-3 p-4 text-sm font-medium text-ink transition-colors hover:text-accent lg:hidden" data-testid="see-all-training">
+          <span className="flex items-center gap-2">
+            <Dumbbell className="size-4 text-accent" aria-hidden />
+            {t('health.seeAllTraining')}
+          </span>
+          <ChevronRight className="size-4 text-ink-3" aria-hidden />
+        </Link>
         <HealthView userId={me.id} timeZone={me.time_zone} />
       </div>
+    </div>
+  )
+}
+
+export function ClientTrainingPage() {
+  const { t } = useTranslation()
+  const me = useProfile()
+  return (
+    <div>
+      <PageHeader title={t('training.title')} subtitle={t('training.subtitle')} />
+      <TrainingHistory clientId={me.id} timeZone={me.time_zone} />
     </div>
   )
 }

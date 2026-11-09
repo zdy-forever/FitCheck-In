@@ -215,6 +215,20 @@ export const api = {
         .limit(5000),
     )
   },
+  /** Apple Watch workouts (one row each — cheap even for a year). RLS hides them unless shared. */
+  async workouts(userId: string, sinceDays = 400): Promise<HealthSample[]> {
+    const since = new Date(Date.now() - sinceDays * 86_400_000).toISOString()
+    return unwrap(
+      await supabase
+        .from('health_samples')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('metric_type', 'workout')
+        .gte('measured_at', since)
+        .order('start_at', { ascending: false })
+        .limit(2000),
+    )
+  },
   async devices(): Promise<SyncDevice[]> {
     // Explicit columns: the import-token hash is not granted to clients (select * would fail).
     return unwrap(

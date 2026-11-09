@@ -55,3 +55,53 @@ test('client home shows only the four headline scores; full detail is one click 
   await expect(page).toHaveURL(/\/client\/health$/)
   await expect(page.getByTestId('fitness-panel')).toBeVisible()
 })
+
+test('training history: coach sessions carry the Apple Watch data recorded at the same time; a year of solo workouts', async ({ page }) => {
+  await page.addInitScript(() => { if (!localStorage.getItem('fitcheckin.lang')) localStorage.setItem('fitcheckin.lang', 'en') })
+  await page.goto('/auth?demo=1')
+  await page.getByTestId('create-demo').click()
+  await expect(page.getByTestId('demo-ready')).toBeVisible({ timeout: 30_000 })
+  await page.getByTestId('demo-signin-client').click()
+  await expect(page).toHaveURL(/\/client$/)
+
+  await page.goto('/client/training')
+  const history = page.getByTestId('training-history')
+  await expect(history).toBeVisible()
+  // Every past demo coach session was also recorded by the (simulated) watch → 12 / 12.
+  await expect(history.getByText('Sessions with watch data').locator('..')).toContainText('12 / 12')
+  const coach = page.getByTestId('training-entry-session').first()
+  await expect(coach).toContainText('With coach')
+  await expect(coach).toContainText('Watch')
+  await coach.getByRole('button').click()
+  const detail = coach.getByTestId('training-detail')
+  await expect(detail).toContainText('Avg / max heart rate')
+  await expect(detail).toContainText('Active energy')
+  await expect(page.locator('main').getByTitle(/Simulated demo data/).first()).toBeVisible() // simulated is labelled
+
+  // Solo workouts only; filter by a refined kind.
+  await page.getByRole('tab', { name: 'Solo' }).click()
+  await expect(page.getByTestId('training-entry-session')).toHaveCount(0)
+  await page.getByTestId('kind-filter').selectOption('racket_sports')
+  await expect(page.getByTestId('training-entry-solo').first()).toContainText('Racket sports')
+
+  // Monthly view spans the year; the table view carries the same numbers.
+  await page.getByRole('tab', { name: 'Month' }).click()
+  await page.getByTestId('training-chart').getByRole('button', { name: 'Show as table' }).click()
+  await expect(page.getByTestId('training-chart').locator('tbody tr')).toHaveCount(12)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), 'no horizontal overflow').toBe(0)
+})
+
+test('trainer sees the same training history on the client page (Training tab)', async ({ page }) => {
+  await page.addInitScript(() => { if (!localStorage.getItem('fitcheckin.lang')) localStorage.setItem('fitcheckin.lang', 'en') })
+  await page.goto('/auth?demo=1')
+  await page.getByTestId('create-demo').click()
+  await expect(page.getByTestId('demo-ready')).toBeVisible({ timeout: 30_000 })
+  await page.getByTestId('demo-signin-trainer').click()
+  await expect(page).toHaveURL(/\/trainer$/)
+  await page.goto('/trainer/clients')
+  await page.getByText('Demo Client Sam').locator('visible=true').first().click()
+  await page.getByRole('tab', { name: 'Training' }).click()
+  await expect(page).toHaveURL(/tab=training/)
+  await expect(page.getByTestId('training-history').getByText('Sessions with watch data').locator('..')).toContainText('12 / 12')
+  await expect(page.getByTestId('training-entry-solo').first()).toBeVisible()
+})

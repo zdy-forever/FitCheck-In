@@ -5,7 +5,7 @@ import { zipSync } from 'fflate'
 const strToU8 = (s: string) => new Uint8Array(Buffer.from(s, 'utf8'))
 import { describe, expect, it } from 'vitest'
 import { ExportAggregator, ExportScanner, parseExportDate, parseHealthExport, stableId, workoutKind } from '@/features/health-import/parseExport'
-import { METRICS, validateSample, HEALTH_CATEGORIES } from '@shared/metrics/health-schema.ts'
+import { HEALTH_CATEGORIES, METRICS, validateSample, WORKOUT_KINDS } from '@shared/metrics/health-schema.ts'
 
 const TZ = 'Australia/Sydney'
 const NOW = Date.parse('2026-11-08T08:00:00Z') // 19:00 local
@@ -146,11 +146,34 @@ describe('Apple Health export parser', () => {
     expect(stableId('a', 'b')).not.toBe(stableId('a', 'c'))
   })
 
-  it('workout kinds match the iOS mapping', () => {
-    expect(workoutKind('HKWorkoutActivityTypeHiking')).toBe('walking')
+  it('workout kinds: health+ kinds unchanged, the old "mixed" bucket refined, unknown stays mixed', () => {
+    expect(workoutKind('HKWorkoutActivityTypeRunning')).toBe('running')
     expect(workoutKind('HKWorkoutActivityTypeFunctionalStrengthTraining')).toBe('strength')
     expect(workoutKind('HKWorkoutActivityTypePilates')).toBe('yoga')
-    expect(workoutKind('HKWorkoutActivityTypeSoccer')).toBe('mixed')
+    expect(workoutKind('HKWorkoutActivityTypeHiking')).toBe('hiking')
+    expect(workoutKind('HKWorkoutActivityTypeHighIntensityIntervalTraining')).toBe('hiit')
+    expect(workoutKind('HKWorkoutActivityTypeSoccer')).toBe('team_sports')
+    expect(workoutKind('HKWorkoutActivityTypeTennis')).toBe('racket_sports')
+    expect(workoutKind('HKWorkoutActivityTypeBoxing')).toBe('combat')
+    expect(workoutKind('HKWorkoutActivityTypeCurling')).toBe('mixed')
+    // Every kind the parser can produce is accepted by the server.
+    for (const t of ['Hiking', 'HighIntensityIntervalTraining', 'CoreTraining', 'Dance', 'Rowing', 'Elliptical', 'StairClimbing', 'Soccer', 'Tennis', 'Boxing', 'Climbing', 'Flexibility', 'Cooldown', 'Curling'])
+      expect(WORKOUT_KINDS as readonly string[]).toContain(workoutKind(`HKWorkoutActivityType${t}`))
+  })
+
+  it('keeps a year of workouts while other metrics stay at the 90-day window', () => {
+    const old = (days: number) => new Date(NOW - days * 86_400_000)
+    const fmt = (t: Date) => `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(t.getUTCDate()).padStart(2, '0')} 08:00:00 +0000`
+    const fmtEnd = (t: Date) => fmt(t).replace('08:00:00', '08:40:00')
+    const xml = `<?xml version="1.0"?><HealthData>
+ <Workout workoutActivityType="HKWorkoutActivityTypeTennis" duration="40" durationUnit="min" sourceName="Watch" startDate="${fmt(old(200))}" endDate="${fmtEnd(old(200))}"/>
+ <Workout workoutActivityType="HKWorkoutActivityTypeRunning" duration="40" durationUnit="min" sourceName="Watch" startDate="${fmt(old(380))}" endDate="${fmtEnd(old(380))}"/>
+ <Record type="HKQuantityTypeIdentifierRestingHeartRate" sourceName="Watch" unit="count/min" startDate="${fmt(old(200))}" endDate="${fmt(old(200))}" value="55"/>
+</HealthData>`
+    const r = parse(xml)
+    expect(r.samples.map((s) => s.category)).toEqual(['racket_sports']) // 200 d kept; 380 d and the 200-d resting HR dropped
+    const enabled = new Set(HEALTH_CATEGORIES)
+    expect(validateSample(r.samples[0], 0, enabled, NOW).ok).toBe(true) // within the server's 400-day limit
   })
 })
 
